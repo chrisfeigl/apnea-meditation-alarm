@@ -142,6 +142,17 @@ class BreathingSession(
     }
 
     private suspend fun runHoldInterval(cycleIndex: Int) {
+        // Play hold chime at start of hold interval (non-blocking)
+        // Skip for first cycle (cycleIndex 0) since pre-hold countdown already played it
+        if (cycleIndex > 0) {
+            scope.launch {
+                audioPlayer.playHoldChime(
+                    preferences.holdChimeVolumeMultiplier,
+                    preferences.customHoldChimeUri
+                )
+            }
+        }
+
         val holdDuration = preferences.breathHoldDurationSeconds
 
         for (elapsed in 0 until holdDuration) {
@@ -168,15 +179,17 @@ class BreathingSession(
         }
 
         totalElapsedSeconds += holdDuration
-
-        // Play breath chime to signal end of hold / start of breathing
-        audioPlayer.playBreathChime(
-            preferences.breathChimeVolumeMultiplier,
-            preferences.customBreathChimeUri
-        )
     }
 
     private suspend fun runBreathingInterval(cycleIndex: Int) {
+        // Play breath chime at start of breathing interval (non-blocking)
+        scope.launch {
+            audioPlayer.playBreathChime(
+                preferences.breathChimeVolumeMultiplier,
+                preferences.customBreathChimeUri
+            )
+        }
+
         val breathingDuration = preferences.breathingIntervalDuration(cycleIndex)
 
         for (elapsed in 0 until breathingDuration) {
@@ -203,12 +216,6 @@ class BreathingSession(
         }
 
         totalElapsedSeconds += breathingDuration
-
-        // Play hold chime to signal end of breathing / start of next hold
-        audioPlayer.playHoldChime(
-            preferences.holdChimeVolumeMultiplier,
-            preferences.customHoldChimeUri
-        )
     }
 
     private fun startFinishingBowl() {

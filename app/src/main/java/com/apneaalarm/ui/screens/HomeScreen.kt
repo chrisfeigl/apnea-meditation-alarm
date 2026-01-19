@@ -114,30 +114,33 @@ fun HomeScreen(
 
         Spacer(modifier = Modifier.height(48.dp))
 
-        // Start button
-        Button(
-            onClick = { onStartSession(false) },
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(56.dp)
-        ) {
-            Text(
-                text = "START SESSION",
-                style = MaterialTheme.typography.titleMedium
-            )
+        // Only show start buttons if no session is active
+        if (!isSessionActive) {
+            // Start button
+            Button(
+                onClick = { onStartSession(false) },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp)
+            ) {
+                Text(
+                    text = "START SESSION",
+                    style = MaterialTheme.typography.titleMedium
+                )
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Start without intro button
+            OutlinedButton(
+                onClick = { onStartSession(true) },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Start (Skip Intro)")
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
         }
-
-        Spacer(modifier = Modifier.height(12.dp))
-
-        // Start without intro button
-        OutlinedButton(
-            onClick = { onStartSession(true) },
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text("Start (Skip Intro)")
-        }
-
-        Spacer(modifier = Modifier.height(24.dp))
 
         // Settings button
         OutlinedButton(
