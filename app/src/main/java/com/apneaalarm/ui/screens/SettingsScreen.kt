@@ -9,14 +9,14 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
@@ -31,8 +31,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import com.apneaalarm.data.TrainingMode
 import com.apneaalarm.data.UserPreferences
 import com.apneaalarm.ui.components.DurationPickerDialog
 import com.apneaalarm.ui.components.TimePickerDialog
@@ -50,10 +50,7 @@ fun SettingsScreen(
     onIntroBowlVolumeChanged: (Int) -> Unit,
     onBreathChimeVolumeChanged: (Int) -> Unit,
     onHoldChimeVolumeChanged: (Int) -> Unit,
-    onBreathingIntervalMaxChanged: (Int) -> Unit,
-    onBreathingIntervalMinChanged: (Int) -> Unit,
-    onNumberOfIntervalsChanged: (Int) -> Unit,
-    onPFactorChanged: (Float) -> Unit,
+    onTrainingModeChanged: (TrainingMode) -> Unit,
     onSnoozeDurationChanged: (Int) -> Unit,
     onFadeInIntroBowlChanged: (Boolean) -> Unit
 ) {
@@ -66,7 +63,7 @@ fun SettingsScreen(
                 title = { Text("Settings") },
                 navigationIcon = {
                     TextButton(onClick = onNavigateBack) {
-                        Text("← Back")
+                        Text("\u2190 Back")
                     }
                 }
             )
@@ -80,6 +77,81 @@ fun SettingsScreen(
                 .verticalScroll(rememberScrollState())
         ) {
             Spacer(modifier = Modifier.height(8.dp))
+
+            // Training Mode Card
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(
+                    containerColor = when (preferences.trainingMode) {
+                        TrainingMode.RELAXATION -> MaterialTheme.colorScheme.secondaryContainer
+                        TrainingMode.INTENSE -> MaterialTheme.colorScheme.tertiaryContainer
+                    }
+                )
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp)
+                ) {
+                    Text(
+                        text = "Training Mode",
+                        style = MaterialTheme.typography.titleMedium
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Button(
+                            onClick = { onTrainingModeChanged(TrainingMode.RELAXATION) },
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = if (preferences.trainingMode == TrainingMode.RELAXATION)
+                                    MaterialTheme.colorScheme.secondary
+                                else
+                                    MaterialTheme.colorScheme.surfaceVariant
+                            )
+                        ) {
+                            Text("Relaxation")
+                        }
+
+                        OutlinedButton(
+                            onClick = { onTrainingModeChanged(TrainingMode.INTENSE) },
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                containerColor = if (preferences.trainingMode == TrainingMode.INTENSE)
+                                    MaterialTheme.colorScheme.tertiary
+                                else
+                                    MaterialTheme.colorScheme.surfaceVariant
+                            )
+                        ) {
+                            Text(
+                                "Intense",
+                                color = if (preferences.trainingMode == TrainingMode.INTENSE)
+                                    MaterialTheme.colorScheme.onTertiary
+                                else
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    val modeDescription = when (preferences.trainingMode) {
+                        TrainingMode.RELAXATION -> "Calming: 60% hold, generous recovery, 6 cycles"
+                        TrainingMode.INTENSE -> "Demanding: 90% hold, fast recovery, 8 cycles"
+                    }
+                    Text(
+                        text = modeDescription,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
 
             // Alarm Settings Card
             Card(
@@ -196,8 +268,12 @@ fun SettingsScreen(
                             style = MaterialTheme.typography.titleLarge,
                             color = MaterialTheme.colorScheme.primary
                         )
+                        val holdPercent = when (preferences.trainingMode) {
+                            TrainingMode.RELAXATION -> "60%"
+                            TrainingMode.INTENSE -> "90%"
+                        }
                         Text(
-                            text = "Training: ${formatDuration(preferences.breathHoldDurationSeconds)} (75%)",
+                            text = "Training: ${formatDuration(preferences.breathHoldDurationSeconds)} ($holdPercent)",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -327,56 +403,8 @@ fun SettingsScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Breathing Interval Settings Card
-            SettingsCard(title = "Breathing Interval Settings") {
-                Text(
-                    text = "Controls the time between breath holds",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                NumberInput(
-                    label = "Max Breathing Interval (seconds)",
-                    value = preferences.breathingIntervalDurationMaxSeconds,
-                    onValueChange = onBreathingIntervalMaxChanged,
-                    minValue = 3,
-                    maxValue = 300
-                )
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                NumberInput(
-                    label = "Min Breathing Interval (seconds)",
-                    value = preferences.breathingIntervalDurationMinSeconds,
-                    onValueChange = onBreathingIntervalMinChanged,
-                    minValue = 1,
-                    maxValue = 60
-                )
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                NumberInput(
-                    label = "Number of Cycles",
-                    value = preferences.numberOfIntervals,
-                    onValueChange = onNumberOfIntervalsChanged,
-                    minValue = 1,
-                    maxValue = 30
-                )
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                PFactorSlider(
-                    value = preferences.pFactor,
-                    onValueChange = onPFactorChanged
-                )
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // Preview of breathing intervals
-            SettingsCard(title = "Breathing Interval Preview") {
+            // Session Preview Card
+            SettingsCard(title = "Session Preview") {
                 // Total session time
                 val totalSeconds = preferences.totalSessionTimeSeconds
                 val totalMinutes = totalSeconds / 60
@@ -399,27 +427,34 @@ fun SettingsScreen(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
 
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Text(
+                    text = "${preferences.numberOfIntervals} cycles \u2022 ${formatDuration(preferences.breathHoldDurationSeconds)} hold each",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+
                 Spacer(modifier = Modifier.height(16.dp))
 
                 Text(
-                    text = "Duration for each breathing interval:",
+                    text = "Breathing intervals:",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
 
                 Spacer(modifier = Modifier.height(8.dp))
 
-                for (i in 0 until preferences.numberOfIntervals.coerceAtMost(10)) {
+                for (i in 0 until (preferences.numberOfIntervals - 1).coerceAtMost(8)) {
                     val duration = preferences.breathingIntervalDuration(i)
                     Text(
-                        text = "Cycle ${i + 1}: ${duration}s",
+                        text = "After cycle ${i + 1}: ${duration}s",
                         style = MaterialTheme.typography.bodyMedium
                     )
                 }
 
-                if (preferences.numberOfIntervals > 10) {
+                if (preferences.numberOfIntervals > 9) {
                     Text(
-                        text = "... and ${preferences.numberOfIntervals - 10} more cycles",
+                        text = "... and ${preferences.numberOfIntervals - 9} more",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -526,72 +561,4 @@ private fun VolumeSlider(
             steps = 8
         )
     }
-}
-
-@Composable
-private fun PFactorSlider(
-    value: Float,
-    onValueChange: (Float) -> Unit
-) {
-    var sliderValue by remember(value) { mutableFloatStateOf(value) }
-
-    Column {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = "Progression Factor (p)",
-                style = MaterialTheme.typography.bodyMedium
-            )
-            Text(
-                text = String.format("%.2f", sliderValue),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.primary
-            )
-        }
-
-        Text(
-            text = "Lower = faster decrease, Higher = slower decrease",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-
-        Slider(
-            value = sliderValue,
-            onValueChange = { sliderValue = it },
-            onValueChangeFinished = { onValueChange(sliderValue) },
-            valueRange = 0.1f..2.0f
-        )
-    }
-}
-
-@Composable
-private fun NumberInput(
-    label: String,
-    value: Int,
-    onValueChange: (Int) -> Unit,
-    minValue: Int,
-    maxValue: Int
-) {
-    var textValue by remember(value) { mutableStateOf(value.toString()) }
-
-    OutlinedTextField(
-        value = textValue,
-        onValueChange = { newText ->
-            textValue = newText.filter { it.isDigit() }
-            textValue.toIntOrNull()?.let { newValue ->
-                if (newValue in minValue..maxValue) {
-                    onValueChange(newValue)
-                }
-            }
-        },
-        label = { Text(label) },
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-        modifier = Modifier.fillMaxWidth(),
-        supportingText = {
-            Text("Range: $minValue - $maxValue")
-        }
-    )
 }

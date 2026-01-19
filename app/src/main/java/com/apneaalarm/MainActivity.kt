@@ -26,6 +26,7 @@ import androidx.navigation.compose.rememberNavController
 import com.apneaalarm.alarm.AlarmScheduler
 import com.apneaalarm.audio.AudioPlayer
 import com.apneaalarm.data.PreferencesRepository
+import com.apneaalarm.data.TrainingMode
 import com.apneaalarm.data.UserPreferences
 import com.apneaalarm.session.SessionProgress
 import com.apneaalarm.session.SessionService
@@ -136,17 +137,8 @@ class MainActivity : ComponentActivity() {
                         onHoldChimeVolumeChanged = { volume ->
                             handleHoldChimeVolumeChanged(volume)
                         },
-                        onBreathingIntervalMaxChanged = { max ->
-                            handleBreathingIntervalMaxChanged(max)
-                        },
-                        onBreathingIntervalMinChanged = { min ->
-                            handleBreathingIntervalMinChanged(min)
-                        },
-                        onNumberOfIntervalsChanged = { num ->
-                            handleNumberOfIntervalsChanged(num)
-                        },
-                        onPFactorChanged = { pFactor ->
-                            handlePFactorChanged(pFactor)
+                        onTrainingModeChanged = { mode ->
+                            handleTrainingModeChanged(mode)
                         },
                         onFadeInIntroBowlChanged = { fadeIn ->
                             handleFadeInIntroBowlChanged(fadeIn)
@@ -169,7 +161,10 @@ class MainActivity : ComponentActivity() {
                         onStopPreview = {
                             handleStopPreview()
                         },
-                        isPreviewPlaying = isPreviewPlaying
+                        isPreviewPlaying = isPreviewPlaying,
+                        onCompleteSetup = { mode, breathHoldSeconds ->
+                            handleCompleteSetup(mode, breathHoldSeconds)
+                        }
                     )
                 }
             }
@@ -268,27 +263,15 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun handleBreathingIntervalMaxChanged(max: Int) {
+    private fun handleTrainingModeChanged(mode: TrainingMode) {
         lifecycleScope.launch {
-            preferencesRepository.updateBreathingIntervalSettings(durationMax = max)
+            preferencesRepository.updateTrainingMode(mode)
         }
     }
 
-    private fun handleBreathingIntervalMinChanged(min: Int) {
+    private fun handleCompleteSetup(mode: TrainingMode, breathHoldSeconds: Int) {
         lifecycleScope.launch {
-            preferencesRepository.updateBreathingIntervalSettings(durationMin = min)
-        }
-    }
-
-    private fun handleNumberOfIntervalsChanged(num: Int) {
-        lifecycleScope.launch {
-            preferencesRepository.updateBreathingIntervalSettings(numberOfIntervals = num)
-        }
-    }
-
-    private fun handlePFactorChanged(pFactor: Float) {
-        lifecycleScope.launch {
-            preferencesRepository.updateBreathingIntervalSettings(pFactor = pFactor)
+            preferencesRepository.completeSetup(mode, breathHoldSeconds)
         }
     }
 

@@ -6,15 +6,18 @@ import androidx.compose.runtime.getValue
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import com.apneaalarm.data.TrainingMode
 import com.apneaalarm.data.UserPreferences
 import com.apneaalarm.session.SessionProgress
 import com.apneaalarm.ui.screens.AudioFilesScreen
 import com.apneaalarm.ui.screens.HomeScreen
 import com.apneaalarm.ui.screens.SessionScreen
 import com.apneaalarm.ui.screens.SettingsScreen
+import com.apneaalarm.ui.screens.WelcomeScreen
 import kotlinx.coroutines.flow.StateFlow
 
 sealed class Screen(val route: String) {
+    object Welcome : Screen("welcome")
     object Home : Screen("home")
     object Session : Screen("session")
     object Settings : Screen("settings")
@@ -36,10 +39,7 @@ fun ApneaNavGraph(
     onIntroBowlVolumeChanged: (Int) -> Unit,
     onBreathChimeVolumeChanged: (Int) -> Unit,
     onHoldChimeVolumeChanged: (Int) -> Unit,
-    onBreathingIntervalMaxChanged: (Int) -> Unit,
-    onBreathingIntervalMinChanged: (Int) -> Unit,
-    onNumberOfIntervalsChanged: (Int) -> Unit,
-    onPFactorChanged: (Float) -> Unit,
+    onTrainingModeChanged: (TrainingMode) -> Unit,
     onFadeInIntroBowlChanged: (Boolean) -> Unit,
     onIntroBowlUriChanged: (String?) -> Unit,
     onBreathChimeUriChanged: (String?) -> Unit,
@@ -47,15 +47,33 @@ fun ApneaNavGraph(
     onSnoozeDurationChanged: (Int) -> Unit,
     onPreviewSound: (uri: String?, soundType: String) -> Unit,
     onStopPreview: () -> Unit,
-    isPreviewPlaying: Boolean
+    isPreviewPlaying: Boolean,
+    onCompleteSetup: (TrainingMode, Int) -> Unit
 ) {
     val preferences by preferencesFlow.collectAsState()
     val sessionProgress by sessionProgressFlow.collectAsState()
 
+    val startDestination = if (preferences.isFirstTimeSetupComplete) {
+        Screen.Home.route
+    } else {
+        Screen.Welcome.route
+    }
+
     NavHost(
         navController = navController,
-        startDestination = Screen.Home.route
+        startDestination = startDestination
     ) {
+        composable(Screen.Welcome.route) {
+            WelcomeScreen(
+                onComplete = { mode, breathHoldSeconds ->
+                    onCompleteSetup(mode, breathHoldSeconds)
+                    navController.navigate(Screen.Home.route) {
+                        popUpTo(Screen.Welcome.route) { inclusive = true }
+                    }
+                }
+            )
+        }
+
         composable(Screen.Home.route) {
             HomeScreen(
                 preferences = preferences,
@@ -111,10 +129,7 @@ fun ApneaNavGraph(
                 onIntroBowlVolumeChanged = onIntroBowlVolumeChanged,
                 onBreathChimeVolumeChanged = onBreathChimeVolumeChanged,
                 onHoldChimeVolumeChanged = onHoldChimeVolumeChanged,
-                onBreathingIntervalMaxChanged = onBreathingIntervalMaxChanged,
-                onBreathingIntervalMinChanged = onBreathingIntervalMinChanged,
-                onNumberOfIntervalsChanged = onNumberOfIntervalsChanged,
-                onPFactorChanged = onPFactorChanged,
+                onTrainingModeChanged = onTrainingModeChanged,
                 onSnoozeDurationChanged = onSnoozeDurationChanged,
                 onFadeInIntroBowlChanged = onFadeInIntroBowlChanged
             )

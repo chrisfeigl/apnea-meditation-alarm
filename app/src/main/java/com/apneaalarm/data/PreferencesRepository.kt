@@ -5,7 +5,6 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
-import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
@@ -23,6 +22,9 @@ class PreferencesRepository(private val context: Context) {
         val ALARM_ENABLED = booleanPreferencesKey("alarm_enabled")
         val FIRST_TIME_SETUP_COMPLETE = booleanPreferencesKey("first_time_setup_complete")
 
+        // Training mode
+        val TRAINING_MODE = stringPreferencesKey("training_mode")
+
         // Breath hold settings
         val MAX_STATIC_BREATH_HOLD_DURATION = intPreferencesKey("max_static_breath_hold_duration_seconds")
 
@@ -30,12 +32,6 @@ class PreferencesRepository(private val context: Context) {
         val INTRO_BOWL_VOLUME_MULTIPLIER = intPreferencesKey("intro_bowl_volume_multiplier")
         val BREATH_CHIME_VOLUME_MULTIPLIER = intPreferencesKey("breath_chime_volume_multiplier")
         val HOLD_CHIME_VOLUME_MULTIPLIER = intPreferencesKey("hold_chime_volume_multiplier")
-
-        // Breathing interval settings
-        val BREATHING_INTERVAL_DURATION_MAX = intPreferencesKey("breathing_interval_duration_max_seconds")
-        val BREATHING_INTERVAL_DURATION_MIN = intPreferencesKey("breathing_interval_duration_min_seconds")
-        val NUMBER_OF_INTERVALS = intPreferencesKey("number_of_intervals")
-        val P_FACTOR = floatPreferencesKey("p_factor")
 
         // Custom sound URIs
         val CUSTOM_INTRO_BOWL_URI = stringPreferencesKey("custom_intro_bowl_uri")
@@ -50,19 +46,22 @@ class PreferencesRepository(private val context: Context) {
     }
 
     val userPreferences: Flow<UserPreferences> = context.dataStore.data.map { preferences ->
+        val modeString = preferences[PreferencesKeys.TRAINING_MODE]
+        val trainingMode = when (modeString) {
+            "INTENSE" -> TrainingMode.INTENSE
+            else -> TrainingMode.RELAXATION
+        }
+
         UserPreferences(
             alarmHour = preferences[PreferencesKeys.ALARM_HOUR] ?: 7,
             alarmMinute = preferences[PreferencesKeys.ALARM_MINUTE] ?: 0,
             alarmEnabled = preferences[PreferencesKeys.ALARM_ENABLED] ?: false,
             isFirstTimeSetupComplete = preferences[PreferencesKeys.FIRST_TIME_SETUP_COMPLETE] ?: false,
+            trainingMode = trainingMode,
             maxStaticBreathHoldDurationSeconds = preferences[PreferencesKeys.MAX_STATIC_BREATH_HOLD_DURATION] ?: 60,
             introBowlVolumeMultiplier = preferences[PreferencesKeys.INTRO_BOWL_VOLUME_MULTIPLIER] ?: 10,
             breathChimeVolumeMultiplier = preferences[PreferencesKeys.BREATH_CHIME_VOLUME_MULTIPLIER] ?: 10,
             holdChimeVolumeMultiplier = preferences[PreferencesKeys.HOLD_CHIME_VOLUME_MULTIPLIER] ?: 10,
-            breathingIntervalDurationMaxSeconds = preferences[PreferencesKeys.BREATHING_INTERVAL_DURATION_MAX] ?: 60,
-            breathingIntervalDurationMinSeconds = preferences[PreferencesKeys.BREATHING_INTERVAL_DURATION_MIN] ?: 3,
-            numberOfIntervals = preferences[PreferencesKeys.NUMBER_OF_INTERVALS] ?: 10,
-            pFactor = preferences[PreferencesKeys.P_FACTOR] ?: 0.25f,
             customIntroBowlUri = preferences[PreferencesKeys.CUSTOM_INTRO_BOWL_URI],
             customBreathChimeUri = preferences[PreferencesKeys.CUSTOM_BREATH_CHIME_URI],
             customHoldChimeUri = preferences[PreferencesKeys.CUSTOM_HOLD_CHIME_URI],
@@ -102,17 +101,9 @@ class PreferencesRepository(private val context: Context) {
         }
     }
 
-    suspend fun updateBreathingIntervalSettings(
-        durationMax: Int? = null,
-        durationMin: Int? = null,
-        numberOfIntervals: Int? = null,
-        pFactor: Float? = null
-    ) {
+    suspend fun updateTrainingMode(mode: TrainingMode) {
         context.dataStore.edit { preferences ->
-            durationMax?.let { preferences[PreferencesKeys.BREATHING_INTERVAL_DURATION_MAX] = it }
-            durationMin?.let { preferences[PreferencesKeys.BREATHING_INTERVAL_DURATION_MIN] = it }
-            numberOfIntervals?.let { preferences[PreferencesKeys.NUMBER_OF_INTERVALS] = it.coerceAtLeast(1) }
-            pFactor?.let { preferences[PreferencesKeys.P_FACTOR] = it.coerceIn(0.01f, 2.0f) }
+            preferences[PreferencesKeys.TRAINING_MODE] = mode.name
         }
     }
 
@@ -169,14 +160,11 @@ class PreferencesRepository(private val context: Context) {
             preferences[PreferencesKeys.ALARM_MINUTE] = prefs.alarmMinute
             preferences[PreferencesKeys.ALARM_ENABLED] = prefs.alarmEnabled
             preferences[PreferencesKeys.FIRST_TIME_SETUP_COMPLETE] = prefs.isFirstTimeSetupComplete
+            preferences[PreferencesKeys.TRAINING_MODE] = prefs.trainingMode.name
             preferences[PreferencesKeys.MAX_STATIC_BREATH_HOLD_DURATION] = prefs.maxStaticBreathHoldDurationSeconds
             preferences[PreferencesKeys.INTRO_BOWL_VOLUME_MULTIPLIER] = prefs.introBowlVolumeMultiplier
             preferences[PreferencesKeys.BREATH_CHIME_VOLUME_MULTIPLIER] = prefs.breathChimeVolumeMultiplier
             preferences[PreferencesKeys.HOLD_CHIME_VOLUME_MULTIPLIER] = prefs.holdChimeVolumeMultiplier
-            preferences[PreferencesKeys.BREATHING_INTERVAL_DURATION_MAX] = prefs.breathingIntervalDurationMaxSeconds
-            preferences[PreferencesKeys.BREATHING_INTERVAL_DURATION_MIN] = prefs.breathingIntervalDurationMinSeconds
-            preferences[PreferencesKeys.NUMBER_OF_INTERVALS] = prefs.numberOfIntervals
-            preferences[PreferencesKeys.P_FACTOR] = prefs.pFactor
 
             prefs.customIntroBowlUri?.let { preferences[PreferencesKeys.CUSTOM_INTRO_BOWL_URI] = it }
                 ?: preferences.remove(PreferencesKeys.CUSTOM_INTRO_BOWL_URI)
@@ -186,6 +174,14 @@ class PreferencesRepository(private val context: Context) {
                 ?: preferences.remove(PreferencesKeys.CUSTOM_HOLD_CHIME_URI)
             preferences[PreferencesKeys.FADE_IN_INTRO_BOWL] = prefs.fadeInIntroBowl
             preferences[PreferencesKeys.SNOOZE_DURATION_MINUTES] = prefs.snoozeDurationMinutes
+        }
+    }
+
+    suspend fun completeSetup(trainingMode: TrainingMode, maxStaticBreathHold: Int) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferencesKeys.TRAINING_MODE] = trainingMode.name
+            preferences[PreferencesKeys.MAX_STATIC_BREATH_HOLD_DURATION] = maxStaticBreathHold
+            preferences[PreferencesKeys.FIRST_TIME_SETUP_COMPLETE] = true
         }
     }
 }
