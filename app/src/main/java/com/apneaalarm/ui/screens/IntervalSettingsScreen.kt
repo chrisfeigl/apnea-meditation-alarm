@@ -73,7 +73,7 @@ fun IntervalSettingsScreen(
         ) {
             Spacer(modifier = Modifier.height(8.dp))
 
-            // Training Mode & Max Breath Hold Card
+            // Intention & Max Breath Hold Card
             TrainingModeCard(
                 preferences = preferences,
                 onTrainingModeChanged = { mode ->
@@ -161,7 +161,7 @@ private fun TrainingModeCard(
             modifier = Modifier.padding(16.dp)
         ) {
             Text(
-                text = "Training Mode",
+                text = "Intention",
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
