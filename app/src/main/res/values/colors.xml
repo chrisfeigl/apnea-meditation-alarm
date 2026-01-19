@@ -1,9 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="primary">#0061A4</color>
-    <color name="primary_dark">#003258</color>
-    <color name="accent">#006E1C</color>
-    <color name="hold_blue">#1A237E</color>
-    <color name="breathe_green">#1B5E20</color>
-    <color name="finish_purple">#4A148C</color>
+    <!-- Zen-inspired color palette -->
+    <color name="primary">#D4A574</color>
+    <color name="primary_dark">#8B5A2B</color>
+    <color name="accent">#9CB99C</color>
+    <color name="background_dark">#1A1A2E</color>
+    <color name="background_light">#FAF6F0</color>
+    <color name="hold_indigo">#3D3D5C</color>
+    <color name="breathe_sage">#4A6B4A</color>
+    <color name="finish_lavender">#6B5B7A</color>
 </resources>
