@@ -37,8 +37,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import com.apneaalarm.data.IntensityLevel
 import com.apneaalarm.data.TrainingMode
 import com.apneaalarm.data.UserPreferences
+import androidx.compose.ui.graphics.Color
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -418,22 +420,55 @@ private fun NumberInputRow(
 
 @Composable
 private fun SessionPreviewCard(preferences: UserPreferences) {
+    // Color based on intensity level
+    val containerColor = when (preferences.intensityLevel) {
+        IntensityLevel.CALM -> Color(0xFF4CAF50)           // Green
+        IntensityLevel.CHALLENGING -> Color(0xFFFFC107)    // Amber
+        IntensityLevel.HIGH_STRESS -> Color(0xFFFF9800)    // Orange
+        IntensityLevel.ADVANCED -> Color(0xFFF44336)       // Red
+    }
+    val contentColor = when (preferences.intensityLevel) {
+        IntensityLevel.CALM -> Color.White
+        IntensityLevel.CHALLENGING -> Color.Black
+        IntensityLevel.HIGH_STRESS -> Color.Black
+        IntensityLevel.ADVANCED -> Color.White
+    }
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.primaryContainer
+            containerColor = containerColor
         )
     ) {
         Column(
             modifier = Modifier.padding(16.dp)
         ) {
-            Text(
-                text = "Session Preview",
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onPrimaryContainer
-            )
+            // Header row with title and intensity
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Session Preview",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = contentColor
+                )
+                Column(horizontalAlignment = Alignment.End) {
+                    Text(
+                        text = "Intensity ${preferences.intensityFactor}",
+                        style = MaterialTheme.typography.titleLarge,
+                        color = contentColor
+                    )
+                    Text(
+                        text = preferences.intensityLevel.label,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = contentColor.copy(alpha = 0.8f)
+                    )
+                }
+            }
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
             // Summary row
             Row(
@@ -444,24 +479,24 @@ private fun SessionPreviewCard(preferences: UserPreferences) {
                     Text(
                         text = "Breath Holds",
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+                        color = contentColor.copy(alpha = 0.7f)
                     )
                     Text(
                         text = "${preferences.numberOfIntervals} x ${preferences.breathHoldDurationSeconds}s",
                         style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                        color = contentColor
                     )
                 }
                 Column(horizontalAlignment = Alignment.End) {
                     Text(
                         text = "Total Time",
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+                        color = contentColor.copy(alpha = 0.7f)
                     )
                     Text(
                         text = formatTime(preferences.totalSessionTimeSeconds),
                         style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                        color = contentColor
                     )
                 }
             }
@@ -471,7 +506,7 @@ private fun SessionPreviewCard(preferences: UserPreferences) {
             Text(
                 text = "Breathing Intervals",
                 style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+                color = contentColor.copy(alpha = 0.7f)
             )
 
             Spacer(modifier = Modifier.height(4.dp))
@@ -482,9 +517,9 @@ private fun SessionPreviewCard(preferences: UserPreferences) {
             }
 
             Text(
-                text = intervals.joinToString(" -> ") { "${it}s" },
+                text = intervals.joinToString(" \u2192 ") { "${it}s" },
                 style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onPrimaryContainer
+                color = contentColor
             )
 
             Spacer(modifier = Modifier.height(8.dp))
@@ -493,7 +528,7 @@ private fun SessionPreviewCard(preferences: UserPreferences) {
                 text = "R0=${preferences.breathingIntervalDurationMaxSeconds}s, " +
                         "Rn=${preferences.breathingIntervalDurationMinSeconds}s",
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.6f)
+                color = contentColor.copy(alpha = 0.6f)
             )
         }
     }

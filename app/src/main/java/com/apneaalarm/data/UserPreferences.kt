@@ -5,6 +5,13 @@ enum class TrainingMode {
     INTENSE      // Performance, CO₂ tolerance training
 }
 
+enum class IntensityLevel(val label: String, val description: String) {
+    CALM("Calm", "Recovery focused"),
+    CHALLENGING("Challenging", "Controlled stress"),
+    HIGH_STRESS("High Stress", "Adaptation training"),
+    ADVANCED("Advanced", "Infrequent use")
+}
+
 data class UserPreferences(
     // Alarm settings
     val alarmHour: Int = 7,
@@ -135,5 +142,46 @@ data class UserPreferences(
             }
 
             return totalHoldTime + totalBreathingTime
+        }
+
+    // Intensity Factor (1-100)
+    // Combines hold load, recovery compression, density, and curve aggression
+    val intensityFactor: Int
+        get() {
+            val m = maxStaticBreathHoldDurationSeconds.toDouble()
+            val h = breathHoldDurationSeconds.toDouble()
+            val rn = breathingIntervalDurationMinSeconds.toDouble()
+            val n = numberOfIntervals.toDouble()
+            val p = effectivePFactor
+
+            // Hold Load: how close the training hold is to max (0.5-1.0 range typically)
+            val holdLoad = if (m > 0) h / m else 0.0
+
+            // Recovery Compression: how short the min rest is relative to hold (higher = more intense)
+            val recoveryCompression = if (h > 0) 1.0 - (rn / h) else 0.0
+
+            // Density Factor: number of rounds normalized to 10 as upper bound
+            val densityFactor = (n / 10.0).coerceAtMost(1.0)
+
+            // Curve Aggression: lower p = earlier stress = higher intensity
+            // CA = clamp((1.6 - p) / (1.6 - 0.5), 0, 1)
+            val curveAggression = ((1.6 - p) / (1.6 - 0.5)).coerceIn(0.0, 1.0)
+
+            // Weighted combination
+            val intensityRaw = 0.40 * holdLoad +
+                    0.30 * recoveryCompression +
+                    0.20 * densityFactor +
+                    0.10 * curveAggression
+
+            return (100 * intensityRaw).toInt().coerceIn(1, 100)
+        }
+
+    // Intensity level category based on intensity factor
+    val intensityLevel: IntensityLevel
+        get() = when {
+            intensityFactor < 40 -> IntensityLevel.CALM
+            intensityFactor < 70 -> IntensityLevel.CHALLENGING
+            intensityFactor < 90 -> IntensityLevel.HIGH_STRESS
+            else -> IntensityLevel.ADVANCED
         }
 }

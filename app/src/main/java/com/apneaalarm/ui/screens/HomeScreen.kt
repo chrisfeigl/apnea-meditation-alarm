@@ -2,11 +2,13 @@ package com.apneaalarm.ui.screens
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -19,6 +21,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import com.apneaalarm.data.IntensityLevel
 import com.apneaalarm.data.UserPreferences
 
 @Composable
@@ -63,11 +66,24 @@ fun HomeScreen(
             Spacer(modifier = Modifier.height(24.dp))
         }
 
-        // Session summary card
+        // Session summary card with intensity color coding
+        val intensityColor = when (preferences.intensityLevel) {
+            IntensityLevel.CALM -> Color(0xFF4CAF50)           // Green
+            IntensityLevel.CHALLENGING -> Color(0xFFFFC107)    // Amber
+            IntensityLevel.HIGH_STRESS -> Color(0xFFFF9800)    // Orange
+            IntensityLevel.ADVANCED -> Color(0xFFF44336)       // Red
+        }
+        val intensityContentColor = when (preferences.intensityLevel) {
+            IntensityLevel.CALM -> Color.White
+            IntensityLevel.CHALLENGING -> Color.Black
+            IntensityLevel.HIGH_STRESS -> Color.Black
+            IntensityLevel.ADVANCED -> Color.White
+        }
+
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceVariant
+                containerColor = intensityColor
             )
         ) {
             Column(
@@ -76,29 +92,48 @@ fun HomeScreen(
                     .padding(16.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Text(
-                    text = "Session Summary",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Session Summary",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = intensityContentColor
+                    )
+                    Column(horizontalAlignment = Alignment.End) {
+                        Text(
+                            text = "Intensity ${preferences.intensityFactor}",
+                            style = MaterialTheme.typography.titleLarge,
+                            color = intensityContentColor
+                        )
+                        Text(
+                            text = preferences.intensityLevel.label,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = intensityContentColor.copy(alpha = 0.8f)
+                        )
+                    }
+                }
 
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(16.dp))
 
                 Text(
                     text = "${preferences.numberOfIntervals} breath-hold cycles",
-                    style = MaterialTheme.typography.bodyLarge
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = intensityContentColor
                 )
 
                 Text(
                     text = "Hold: ${formatDuration(preferences.breathHoldDurationSeconds)} each",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = intensityContentColor.copy(alpha = 0.8f)
                 )
 
                 Text(
                     text = "~${estimateSessionDuration(preferences)} min total",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = intensityContentColor.copy(alpha = 0.8f)
                 )
 
                 if (preferences.alarmEnabled) {
@@ -106,7 +141,7 @@ fun HomeScreen(
                     Text(
                         text = "Alarm: ${String.format("%02d:%02d", preferences.alarmHour, preferences.alarmMinute)}",
                         style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.primary
+                        color = intensityContentColor
                     )
                 }
             }
