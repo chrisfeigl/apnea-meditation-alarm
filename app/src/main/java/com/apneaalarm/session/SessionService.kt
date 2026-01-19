@@ -187,16 +187,26 @@ class SessionService : Service() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
+        // Use service intent directly for stop action
         val stopIntent = Intent(this, SessionService::class.java).apply {
             action = ACTION_STOP_SESSION
         }
 
-        val stopPendingIntent = PendingIntent.getService(
-            this,
-            1,
-            stopIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
+        val stopPendingIntent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            PendingIntent.getForegroundService(
+                this,
+                1,
+                stopIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+        } else {
+            PendingIntent.getService(
+                this,
+                1,
+                stopIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+        }
 
         val channelId = if (isFinishing) CHANNEL_ID_FINISH else CHANNEL_ID
 
@@ -207,22 +217,23 @@ class SessionService : Service() {
             .setContentIntent(pendingIntent)
             .setOngoing(true)
             .setAutoCancel(false)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+
+        // Always add a prominent stop action
+        val stopAction = NotificationCompat.Action.Builder(
+            R.drawable.ic_stop,
+            if (isFinishing) "STOP" else "STOP",
+            stopPendingIntent
+        ).build()
+        builder.addAction(stopAction)
 
         if (isFinishing) {
-            builder.addAction(
-                NotificationCompat.Action.Builder(
-                    R.drawable.ic_stop,
-                    "STOP SESSION",
-                    stopPendingIntent
-                ).build()
-            )
             builder.setFullScreenIntent(pendingIntent, true)
             builder.setPriority(NotificationCompat.PRIORITY_HIGH)
             builder.setCategory(NotificationCompat.CATEGORY_ALARM)
-            builder.setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
         } else {
-            builder.addAction(R.drawable.ic_stop, "Stop", stopPendingIntent)
             builder.setSilent(true)
+            builder.setPriority(NotificationCompat.PRIORITY_LOW)
         }
 
         return builder.build()
