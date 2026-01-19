@@ -620,6 +620,39 @@ class AudioPlayer(private val context: Context) {
         continuousPlayJob = null
     }
 
+    /**
+     * Play continuous hold chime at max volume until stopped (for session completion escalation)
+     */
+    fun startContinuousHoldChime(customSoundUri: String? = null) {
+        stopContinuousBowl()
+        val volume = 1.0f  // Max volume
+
+        continuousPlayJob = scope.launch {
+            while (isActive) {
+                if (customSoundUri != null) {
+                    val success = playCustomSound(customSoundUri, volume)
+                    if (!success) {
+                        playDefaultHoldChimeOnce(volume)
+                    }
+                } else {
+                    playDefaultHoldChimeOnce(volume)
+                }
+                delay(2000)  // 2 second gap between chimes
+            }
+        }
+    }
+
+    private suspend fun playDefaultHoldChimeOnce(volume: Float) {
+        if (hasRawResource("chime_hold")) {
+            val success = playRawResource("chime_hold", volume)
+            if (!success) {
+                soundGenerator.playSound(SoundGenerator.SoundType.LOW_GONG, volume)
+            }
+        } else {
+            soundGenerator.playSound(SoundGenerator.SoundType.LOW_GONG, volume)
+        }
+    }
+
     fun release() {
         stopContinuousBowl()
         stopPreview()

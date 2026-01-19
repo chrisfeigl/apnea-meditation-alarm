@@ -38,8 +38,11 @@ sealed class SessionState {
         val isCountdown: Boolean = false  // true when in final 3 seconds
     ) : SessionState()
 
-    // Session complete, continuous bowl playing
-    object Finishing : SessionState()
+    // Session complete, continuous bowl playing at max volume
+    data class Finishing(
+        val elapsedSeconds: Int = 0,
+        val isChimePhase: Boolean = false  // true when switched to repeated chimes after 3 minutes
+    ) : SessionState()
 
     // Session stopped
     object Stopped : SessionState()

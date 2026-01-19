@@ -21,6 +21,7 @@ class BreathingSession(
     private val audioPlayer = AudioPlayer(context)
     private val scope = CoroutineScope(Dispatchers.Default)
     private var sessionJob: Job? = null
+    private var finishingJob: Job? = null
 
     private val _progress = MutableStateFlow(SessionProgress())
     val progress: StateFlow<SessionProgress> = _progress.asStateFlow()
@@ -38,6 +39,8 @@ class BreathingSession(
     fun stop() {
         sessionJob?.cancel()
         sessionJob = null
+        finishingJob?.cancel()
+        finishingJob = null
         audioPlayer.stopContinuousBowl()
         audioPlayer.release()
         _progress.value = SessionProgress(state = SessionState.Stopped, isActive = false)
@@ -210,16 +213,45 @@ class BreathingSession(
 
     private fun startFinishingBowl() {
         _progress.value = SessionProgress(
-            state = SessionState.Finishing,
+            state = SessionState.Finishing(elapsedSeconds = 0, isChimePhase = false),
             currentCycle = preferences.numberOfIntervals,
             totalCycles = preferences.numberOfIntervals,
             totalElapsedSeconds = totalElapsedSeconds,
             isActive = true
         )
 
+        // Play bowl at max volume (multiplier 10)
         audioPlayer.startContinuousBowl(
-            preferences.introBowlVolumeMultiplier,
+            10,  // Max volume
             preferences.customIntroBowlUri
         )
+
+        // Start a timer for 3 minutes, then switch to chimes
+        finishingJob = scope.launch {
+            val threeMinutes = 180  // 3 minutes in seconds
+            for (elapsed in 0 until threeMinutes) {
+                if (!isActive) return@launch
+                delay(1000)
+                _progress.value = _progress.value.copy(
+                    state = SessionState.Finishing(elapsedSeconds = elapsed + 1, isChimePhase = false),
+                    totalElapsedSeconds = totalElapsedSeconds + elapsed + 1
+                )
+            }
+
+            // After 3 minutes, switch to repeated hold chimes at max volume
+            if (!isActive) return@launch
+            audioPlayer.startContinuousHoldChime(preferences.customHoldChimeUri)
+
+            // Continue tracking time in chime phase
+            var chimeElapsed = 0
+            while (isActive) {
+                delay(1000)
+                chimeElapsed++
+                _progress.value = _progress.value.copy(
+                    state = SessionState.Finishing(elapsedSeconds = threeMinutes + chimeElapsed, isChimePhase = true),
+                    totalElapsedSeconds = totalElapsedSeconds + threeMinutes + chimeElapsed
+                )
+            }
+        }
     }
 }
