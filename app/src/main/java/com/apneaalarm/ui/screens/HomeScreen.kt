@@ -198,16 +198,6 @@ fun HomeScreen(
                 )
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
-
-            // Start without intro button
-            OutlinedButton(
-                onClick = { onStartSession(true) },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("Start (Skip Intro)")
-            }
-
             Spacer(modifier = Modifier.height(24.dp))
         }
 
