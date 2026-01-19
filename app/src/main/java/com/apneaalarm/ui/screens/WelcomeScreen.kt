@@ -18,6 +18,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -33,6 +34,9 @@ import androidx.compose.ui.unit.dp
 import com.apneaalarm.data.TrainingMode
 import kotlinx.coroutines.delay
 
+// Default values used when skipping setup
+private const val DEFAULT_BREATH_HOLD_SECONDS = 60
+
 @Composable
 fun WelcomeScreen(
     onComplete: (TrainingMode, Int) -> Unit
@@ -42,19 +46,42 @@ fun WelcomeScreen(
     var recordedBreathHold by remember { mutableIntStateOf(0) }
 
     when (currentPage) {
-        0 -> WelcomeIntroPage { currentPage = 1 }
-        1 -> RelaxationModePage { currentPage = 2 }
-        2 -> IntenseModePage { currentPage = 3 }
-        3 -> ModeSelectionPage { mode ->
-            selectedMode = mode
-            currentPage = 4
-        }
-        4 -> BreathHoldTimerPage { seconds ->
-            recordedBreathHold = seconds
-            selectedMode?.let { mode ->
-                onComplete(mode, seconds)
+        0 -> WelcomeIntroPage(
+            onNext = { currentPage = 1 }
+        )
+        1 -> RelaxationModePage(
+            onBack = { currentPage = 0 },
+            onNext = { currentPage = 2 }
+        )
+        2 -> IntenseModePage(
+            onBack = { currentPage = 1 },
+            onNext = { currentPage = 3 }
+        )
+        3 -> ModeSelectionPage(
+            onBack = { currentPage = 2 },
+            onModeSelected = { mode ->
+                selectedMode = mode
+                currentPage = 4
+            },
+            onSkip = {
+                // Skip with default Relaxation mode
+                onComplete(TrainingMode.RELAXATION, DEFAULT_BREATH_HOLD_SECONDS)
             }
-        }
+        )
+        4 -> BreathHoldTimerPage(
+            onBack = { currentPage = 3 },
+            onComplete = { seconds ->
+                recordedBreathHold = seconds
+                selectedMode?.let { mode ->
+                    onComplete(mode, seconds)
+                }
+            },
+            onSkip = {
+                // Skip with selected mode and default breath hold
+                val mode = selectedMode ?: TrainingMode.RELAXATION
+                onComplete(mode, DEFAULT_BREATH_HOLD_SECONDS)
+            }
+        )
     }
 }
 
@@ -104,15 +131,29 @@ private fun WelcomeIntroPage(onNext: () -> Unit) {
 }
 
 @Composable
-private fun RelaxationModePage(onNext: () -> Unit) {
+private fun RelaxationModePage(
+    onBack: () -> Unit,
+    onNext: () -> Unit
+) {
     Column(
         modifier = Modifier
             .fillMaxSize()
             .padding(24.dp)
             .verticalScroll(rememberScrollState()),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
+        // Back button at top
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.Start
+        ) {
+            TextButton(onClick = onBack) {
+                Text("\u2190 Back")
+            }
+        }
+
+        Spacer(modifier = Modifier.weight(1f))
+
         Text(
             text = "Relaxation Mode",
             style = MaterialTheme.typography.headlineMedium,
@@ -135,7 +176,7 @@ private fun RelaxationModePage(onNext: () -> Unit) {
             )
         }
 
-        Spacer(modifier = Modifier.height(48.dp))
+        Spacer(modifier = Modifier.weight(1f))
 
         Button(
             onClick = onNext,
@@ -145,19 +186,35 @@ private fun RelaxationModePage(onNext: () -> Unit) {
         ) {
             Text("Next", style = MaterialTheme.typography.titleMedium)
         }
+
+        Spacer(modifier = Modifier.height(16.dp))
     }
 }
 
 @Composable
-private fun IntenseModePage(onNext: () -> Unit) {
+private fun IntenseModePage(
+    onBack: () -> Unit,
+    onNext: () -> Unit
+) {
     Column(
         modifier = Modifier
             .fillMaxSize()
             .padding(24.dp)
             .verticalScroll(rememberScrollState()),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
+        // Back button at top
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.Start
+        ) {
+            TextButton(onClick = onBack) {
+                Text("\u2190 Back")
+            }
+        }
+
+        Spacer(modifier = Modifier.weight(1f))
+
         Text(
             text = "Intense Mode",
             style = MaterialTheme.typography.headlineMedium,
@@ -180,7 +237,7 @@ private fun IntenseModePage(onNext: () -> Unit) {
             )
         }
 
-        Spacer(modifier = Modifier.height(48.dp))
+        Spacer(modifier = Modifier.weight(1f))
 
         Button(
             onClick = onNext,
@@ -190,18 +247,35 @@ private fun IntenseModePage(onNext: () -> Unit) {
         ) {
             Text("Next", style = MaterialTheme.typography.titleMedium)
         }
+
+        Spacer(modifier = Modifier.height(16.dp))
     }
 }
 
 @Composable
-private fun ModeSelectionPage(onModeSelected: (TrainingMode) -> Unit) {
+private fun ModeSelectionPage(
+    onBack: () -> Unit,
+    onModeSelected: (TrainingMode) -> Unit,
+    onSkip: () -> Unit
+) {
     Column(
         modifier = Modifier
             .fillMaxSize()
             .padding(24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
+        // Back button at top
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.Start
+        ) {
+            TextButton(onClick = onBack) {
+                Text("\u2190 Back")
+            }
+        }
+
+        Spacer(modifier = Modifier.weight(1f))
+
         Text(
             text = "Choose Your Path",
             style = MaterialTheme.typography.headlineMedium,
@@ -247,11 +321,33 @@ private fun ModeSelectionPage(onModeSelected: (TrainingMode) -> Unit) {
                 style = MaterialTheme.typography.titleMedium
             )
         }
+
+        Spacer(modifier = Modifier.weight(1f))
+
+        // Skip option and note
+        Text(
+            text = "You can change this later in Settings",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        TextButton(onClick = onSkip) {
+            Text("Skip for now")
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
     }
 }
 
 @Composable
-private fun BreathHoldTimerPage(onComplete: (Int) -> Unit) {
+private fun BreathHoldTimerPage(
+    onBack: () -> Unit,
+    onComplete: (Int) -> Unit,
+    onSkip: () -> Unit
+) {
     var timerState by remember { mutableStateOf(TimerState.NOT_STARTED) }
     var elapsedSeconds by remember { mutableIntStateOf(0) }
     var startTime by remember { mutableLongStateOf(0L) }
@@ -271,9 +367,20 @@ private fun BreathHoldTimerPage(onComplete: (Int) -> Unit) {
             .fillMaxSize()
             .padding(24.dp)
             .verticalScroll(rememberScrollState()),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
+        // Back button at top
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.Start
+        ) {
+            TextButton(onClick = onBack) {
+                Text("\u2190 Back")
+            }
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
         Text(
             text = "Record Your Breath Hold",
             style = MaterialTheme.typography.headlineMedium,
@@ -414,6 +521,24 @@ private fun BreathHoldTimerPage(onComplete: (Int) -> Unit) {
                 }
             }
         }
+
+        Spacer(modifier = Modifier.height(32.dp))
+
+        // Skip option and note
+        Text(
+            text = "You can change this later in Settings",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        TextButton(onClick = onSkip) {
+            Text("Skip for now (use 60s default)")
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
     }
 }
 
