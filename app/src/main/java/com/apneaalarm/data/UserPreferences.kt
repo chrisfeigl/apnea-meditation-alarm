@@ -134,9 +134,9 @@ data class UserPreferences(
             // All breath hold intervals
             val totalHoldTime = numberOfIntervals * breathHoldDurationSeconds
 
-            // Breathing intervals (one less than number of holds - no breathing after last hold)
-            val totalBreathingTime = if (numberOfIntervals > 1) {
-                (0 until numberOfIntervals - 1).sumOf { breathingIntervalDuration(it) }
+            // N breathing intervals (one after each hold, including the last)
+            val totalBreathingTime = if (numberOfIntervals > 0) {
+                (0 until numberOfIntervals).sumOf { breathingIntervalDuration(it) }
             } else {
                 0
             }
@@ -154,9 +154,8 @@ data class UserPreferences(
 
             if (m <= 0 || h <= 0 || n <= 1) return 1
 
-            // Calculate average rest interval from actual generated intervals
-            val numRestIntervals = n - 1
-            val avgRest = (0 until numRestIntervals)
+            // Calculate average rest interval from actual generated intervals (N intervals)
+            val avgRest = (0 until n)
                 .map { breathingIntervalDuration(it).toDouble() }
                 .average()
 

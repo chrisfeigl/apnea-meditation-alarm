@@ -385,6 +385,47 @@ private fun ManualSettingsCard(
                     color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.6f)
                 )
             }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Text(
+                text = "Reset to Mode Defaults",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f)
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                val m = preferences.maxStaticBreathHoldDurationSeconds
+                OutlinedButton(
+                    onClick = {
+                        // Relaxation: H = 0.60*M, R0 = 1.25*H, Rn = 0.25*H, N = 6, p = 1.4
+                        val h = (0.60 * m).toInt()
+                        val r0 = (1.25 * h).toInt()
+                        val rn = (0.25 * h).toInt().coerceAtLeast(3)
+                        onManualSettingsChanged(h, r0, rn, 6, 1.4f)
+                    },
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text("Relaxation")
+                }
+                OutlinedButton(
+                    onClick = {
+                        // Intense: H = 0.90*M, R0 = 0.50*H, Rn = 0.12*H, N = 8, p = 0.75
+                        val h = (0.90 * m).toInt()
+                        val r0 = (0.50 * h).toInt()
+                        val rn = (0.12 * h).toInt().coerceAtLeast(3)
+                        onManualSettingsChanged(h, r0, rn, 8, 0.75f)
+                    },
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text("Intense")
+                }
+            }
         }
     }
 }
@@ -511,8 +552,8 @@ private fun SessionPreviewCard(preferences: UserPreferences) {
 
             Spacer(modifier = Modifier.height(4.dp))
 
-            // Show all breathing intervals
-            val intervals = (0 until preferences.numberOfIntervals - 1).map { i ->
+            // Show all breathing intervals (N intervals for N breath holds)
+            val intervals = (0 until preferences.numberOfIntervals).map { i ->
                 preferences.breathingIntervalDuration(i)
             }
 

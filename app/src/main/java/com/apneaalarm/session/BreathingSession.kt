@@ -84,11 +84,9 @@ class BreathingSession(
             runHoldInterval(cycleIndex)
             if (!scope.isActive) return
 
-            // Breathing interval (except after last cycle)
-            if (cycleIndex < preferences.numberOfIntervals - 1) {
-                runBreathingInterval(cycleIndex)
-                if (!scope.isActive) return
-            }
+            // Breathing interval (including after last hold)
+            runBreathingInterval(cycleIndex)
+            if (!scope.isActive) return
         }
 
         // Phase 4: Continuous bowl until stopped
