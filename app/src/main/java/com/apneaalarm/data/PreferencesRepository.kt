@@ -5,6 +5,7 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
@@ -27,6 +28,14 @@ class PreferencesRepository(private val context: Context) {
 
         // Breath hold settings
         val MAX_STATIC_BREATH_HOLD_DURATION = intPreferencesKey("max_static_breath_hold_duration_seconds")
+
+        // Manual interval settings
+        val USE_MANUAL_INTERVAL_SETTINGS = booleanPreferencesKey("use_manual_interval_settings")
+        val MANUAL_BREATH_HOLD_DURATION = intPreferencesKey("manual_breath_hold_duration_seconds")
+        val MANUAL_R0_SECONDS = intPreferencesKey("manual_r0_seconds")
+        val MANUAL_RN_SECONDS = intPreferencesKey("manual_rn_seconds")
+        val MANUAL_NUMBER_OF_INTERVALS = intPreferencesKey("manual_number_of_intervals")
+        val MANUAL_P_FACTOR = floatPreferencesKey("manual_p_factor")
 
         // Volume multipliers
         val INTRO_BOWL_VOLUME_MULTIPLIER = intPreferencesKey("intro_bowl_volume_multiplier")
@@ -59,6 +68,12 @@ class PreferencesRepository(private val context: Context) {
             isFirstTimeSetupComplete = preferences[PreferencesKeys.FIRST_TIME_SETUP_COMPLETE] ?: false,
             trainingMode = trainingMode,
             maxStaticBreathHoldDurationSeconds = preferences[PreferencesKeys.MAX_STATIC_BREATH_HOLD_DURATION] ?: 60,
+            useManualIntervalSettings = preferences[PreferencesKeys.USE_MANUAL_INTERVAL_SETTINGS] ?: false,
+            manualBreathHoldDurationSeconds = preferences[PreferencesKeys.MANUAL_BREATH_HOLD_DURATION] ?: 36,
+            manualR0Seconds = preferences[PreferencesKeys.MANUAL_R0_SECONDS] ?: 45,
+            manualRnSeconds = preferences[PreferencesKeys.MANUAL_RN_SECONDS] ?: 9,
+            manualNumberOfIntervals = preferences[PreferencesKeys.MANUAL_NUMBER_OF_INTERVALS] ?: 6,
+            manualPFactor = preferences[PreferencesKeys.MANUAL_P_FACTOR] ?: 1.4f,
             introBowlVolumeMultiplier = preferences[PreferencesKeys.INTRO_BOWL_VOLUME_MULTIPLIER] ?: 10,
             breathChimeVolumeMultiplier = preferences[PreferencesKeys.BREATH_CHIME_VOLUME_MULTIPLIER] ?: 10,
             holdChimeVolumeMultiplier = preferences[PreferencesKeys.HOLD_CHIME_VOLUME_MULTIPLIER] ?: 10,
@@ -104,6 +119,28 @@ class PreferencesRepository(private val context: Context) {
     suspend fun updateTrainingMode(mode: TrainingMode) {
         context.dataStore.edit { preferences ->
             preferences[PreferencesKeys.TRAINING_MODE] = mode.name
+        }
+    }
+
+    suspend fun updateUseManualIntervalSettings(useManual: Boolean) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferencesKeys.USE_MANUAL_INTERVAL_SETTINGS] = useManual
+        }
+    }
+
+    suspend fun updateManualIntervalSettings(
+        breathHoldDuration: Int? = null,
+        r0Seconds: Int? = null,
+        rnSeconds: Int? = null,
+        numberOfIntervals: Int? = null,
+        pFactor: Float? = null
+    ) {
+        context.dataStore.edit { preferences ->
+            breathHoldDuration?.let { preferences[PreferencesKeys.MANUAL_BREATH_HOLD_DURATION] = it.coerceAtLeast(5) }
+            r0Seconds?.let { preferences[PreferencesKeys.MANUAL_R0_SECONDS] = it.coerceAtLeast(3) }
+            rnSeconds?.let { preferences[PreferencesKeys.MANUAL_RN_SECONDS] = it.coerceAtLeast(3) }
+            numberOfIntervals?.let { preferences[PreferencesKeys.MANUAL_NUMBER_OF_INTERVALS] = it.coerceIn(1, 20) }
+            pFactor?.let { preferences[PreferencesKeys.MANUAL_P_FACTOR] = it.coerceIn(0.1f, 5.0f) }
         }
     }
 
@@ -162,6 +199,12 @@ class PreferencesRepository(private val context: Context) {
             preferences[PreferencesKeys.FIRST_TIME_SETUP_COMPLETE] = prefs.isFirstTimeSetupComplete
             preferences[PreferencesKeys.TRAINING_MODE] = prefs.trainingMode.name
             preferences[PreferencesKeys.MAX_STATIC_BREATH_HOLD_DURATION] = prefs.maxStaticBreathHoldDurationSeconds
+            preferences[PreferencesKeys.USE_MANUAL_INTERVAL_SETTINGS] = prefs.useManualIntervalSettings
+            preferences[PreferencesKeys.MANUAL_BREATH_HOLD_DURATION] = prefs.manualBreathHoldDurationSeconds
+            preferences[PreferencesKeys.MANUAL_R0_SECONDS] = prefs.manualR0Seconds
+            preferences[PreferencesKeys.MANUAL_RN_SECONDS] = prefs.manualRnSeconds
+            preferences[PreferencesKeys.MANUAL_NUMBER_OF_INTERVALS] = prefs.manualNumberOfIntervals
+            preferences[PreferencesKeys.MANUAL_P_FACTOR] = prefs.manualPFactor
             preferences[PreferencesKeys.INTRO_BOWL_VOLUME_MULTIPLIER] = prefs.introBowlVolumeMultiplier
             preferences[PreferencesKeys.BREATH_CHIME_VOLUME_MULTIPLIER] = prefs.breathChimeVolumeMultiplier
             preferences[PreferencesKeys.HOLD_CHIME_VOLUME_MULTIPLIER] = prefs.holdChimeVolumeMultiplier

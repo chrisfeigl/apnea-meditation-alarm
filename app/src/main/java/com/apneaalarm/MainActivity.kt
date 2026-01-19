@@ -164,6 +164,12 @@ class MainActivity : ComponentActivity() {
                         isPreviewPlaying = isPreviewPlaying,
                         onCompleteSetup = { mode, breathHoldSeconds ->
                             handleCompleteSetup(mode, breathHoldSeconds)
+                        },
+                        onUseManualChanged = { useManual ->
+                            handleUseManualChanged(useManual)
+                        },
+                        onManualSettingsChanged = { h, r0, rn, n, p ->
+                            handleManualSettingsChanged(h, r0, rn, n, p)
                         }
                     )
                 }
@@ -272,6 +278,24 @@ class MainActivity : ComponentActivity() {
     private fun handleCompleteSetup(mode: TrainingMode, breathHoldSeconds: Int) {
         lifecycleScope.launch {
             preferencesRepository.completeSetup(mode, breathHoldSeconds)
+        }
+    }
+
+    private fun handleUseManualChanged(useManual: Boolean) {
+        lifecycleScope.launch {
+            preferencesRepository.updateUseManualIntervalSettings(useManual)
+        }
+    }
+
+    private fun handleManualSettingsChanged(h: Int?, r0: Int?, rn: Int?, n: Int?, p: Float?) {
+        lifecycleScope.launch {
+            preferencesRepository.updateManualIntervalSettings(
+                breathHoldDuration = h,
+                r0Seconds = r0,
+                rnSeconds = rn,
+                numberOfIntervals = n,
+                pFactor = p
+            )
         }
     }
 

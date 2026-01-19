@@ -10,7 +10,9 @@ import com.apneaalarm.data.TrainingMode
 import com.apneaalarm.data.UserPreferences
 import com.apneaalarm.session.SessionProgress
 import com.apneaalarm.ui.screens.AudioFilesScreen
+import com.apneaalarm.ui.screens.AudioSettingsScreen
 import com.apneaalarm.ui.screens.HomeScreen
+import com.apneaalarm.ui.screens.IntervalSettingsScreen
 import com.apneaalarm.ui.screens.SessionScreen
 import com.apneaalarm.ui.screens.SettingsScreen
 import com.apneaalarm.ui.screens.WelcomeScreen
@@ -21,6 +23,8 @@ sealed class Screen(val route: String) {
     object Home : Screen("home")
     object Session : Screen("session")
     object Settings : Screen("settings")
+    object IntervalSettings : Screen("interval_settings")
+    object AudioSettings : Screen("audio_settings")
     object AudioFiles : Screen("audio_files")
 }
 
@@ -48,7 +52,9 @@ fun ApneaNavGraph(
     onPreviewSound: (uri: String?, soundType: String) -> Unit,
     onStopPreview: () -> Unit,
     isPreviewPlaying: Boolean,
-    onCompleteSetup: (TrainingMode, Int) -> Unit
+    onCompleteSetup: (TrainingMode, Int) -> Unit,
+    onUseManualChanged: (Boolean) -> Unit,
+    onManualSettingsChanged: (h: Int?, r0: Int?, rn: Int?, n: Int?, p: Float?) -> Unit
 ) {
     val preferences by preferencesFlow.collectAsState()
     val sessionProgress by sessionProgressFlow.collectAsState()
@@ -120,17 +126,39 @@ fun ApneaNavGraph(
             SettingsScreen(
                 preferences = preferences,
                 onNavigateBack = { navController.popBackStack() },
-                onNavigateToAudioFiles = {
-                    navController.navigate(Screen.AudioFiles.route)
+                onNavigateToIntervalSettings = {
+                    navController.navigate(Screen.IntervalSettings.route)
+                },
+                onNavigateToAudioSettings = {
+                    navController.navigate(Screen.AudioSettings.route)
                 },
                 onAlarmEnabledChanged = onAlarmEnabledChanged,
                 onAlarmTimeChanged = onAlarmTimeChanged,
-                onBreathHoldChanged = onBreathHoldChanged,
+                onSnoozeDurationChanged = onSnoozeDurationChanged
+            )
+        }
+
+        composable(Screen.IntervalSettings.route) {
+            IntervalSettingsScreen(
+                preferences = preferences,
+                onNavigateBack = { navController.popBackStack() },
+                onTrainingModeChanged = onTrainingModeChanged,
+                onMaxBreathHoldChanged = onBreathHoldChanged,
+                onUseManualChanged = onUseManualChanged,
+                onManualSettingsChanged = onManualSettingsChanged
+            )
+        }
+
+        composable(Screen.AudioSettings.route) {
+            AudioSettingsScreen(
+                preferences = preferences,
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateToAudioFiles = {
+                    navController.navigate(Screen.AudioFiles.route)
+                },
                 onIntroBowlVolumeChanged = onIntroBowlVolumeChanged,
                 onBreathChimeVolumeChanged = onBreathChimeVolumeChanged,
                 onHoldChimeVolumeChanged = onHoldChimeVolumeChanged,
-                onTrainingModeChanged = onTrainingModeChanged,
-                onSnoozeDurationChanged = onSnoozeDurationChanged,
                 onFadeInIntroBowlChanged = onFadeInIntroBowlChanged
             )
         }
