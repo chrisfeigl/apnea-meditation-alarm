@@ -145,35 +145,37 @@ data class UserPreferences(
         }
 
     // Intensity Factor (1-100)
-    // Combines hold load, recovery compression, density, and curve aggression
+    // CO₂ stress accumulation model using actual generated rest intervals
+    // Measures unrecovered CO₂ debt relative to capacity
     val intensityFactor: Int
         get() {
             val m = maxStaticBreathHoldDurationSeconds.toDouble()
             val h = breathHoldDurationSeconds.toDouble()
-            val rn = breathingIntervalDurationMinSeconds.toDouble()
-            val n = numberOfIntervals.toDouble()
-            val p = effectivePFactor
+            val n = numberOfIntervals
 
-            // Hold Load: how close the training hold is to max (0.5-1.0 range typically)
-            val holdLoad = if (m > 0) h / m else 0.0
+            if (m <= 0 || h <= 0 || n <= 1) return 1
 
-            // Recovery Compression: how short the min rest is relative to hold (higher = more intense)
-            val recoveryCompression = if (h > 0) 1.0 - (rn / h) else 0.0
+            // Step 1-3: Compute weighted cumulative CO₂ load from actual intervals
+            // Si = H / (H + Ri) - per-round stress (shorter rest = higher stress)
+            // wi = (i+1) / N - later rounds weighted more (accumulation effect)
+            // L = (1/N) * sum(wi * Si)
+            var sum = 0.0
+            val numRestIntervals = n - 1  // N-1 rest intervals for N breath holds
+            for (i in 0 until numRestIntervals) {
+                val ri = breathingIntervalDuration(i).toDouble()
+                val si = h / (h + ri)           // Round stress: 0 (long rest) to 1 (no rest)
+                val wi = (i + 1).toDouble() / n // Accumulation weight
+                sum += wi * si
+            }
+            val cumulativeLoad = sum / n
 
-            // Density Factor: number of rounds normalized to 10 as upper bound
-            val densityFactor = (n / 10.0).coerceAtMost(1.0)
+            // Step 4: Scale by proximity to max hold
+            // Operating closer to max magnifies intensity
+            val proximityToMax = Math.pow(h / m, 1.2)
 
-            // Curve Aggression: lower p = earlier stress = higher intensity
-            // CA = clamp((1.6 - p) / (1.6 - 0.5), 0, 1)
-            val curveAggression = ((1.6 - p) / (1.6 - 0.5)).coerceIn(0.0, 1.0)
-
-            // Weighted combination
-            val intensityRaw = 0.40 * holdLoad +
-                    0.30 * recoveryCompression +
-                    0.20 * densityFactor +
-                    0.10 * curveAggression
-
-            return (100 * intensityRaw).toInt().coerceIn(1, 100)
+            // Step 5: Final intensity (1-100)
+            val intensity = (100.0 * cumulativeLoad * proximityToMax).toInt()
+            return intensity.coerceIn(1, 100)
         }
 
     // Intensity level category based on intensity factor
