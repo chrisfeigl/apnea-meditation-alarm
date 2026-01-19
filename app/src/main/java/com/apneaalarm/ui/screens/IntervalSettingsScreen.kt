@@ -602,15 +602,6 @@ private fun SessionPreviewCard(preferences: UserPreferences) {
                 style = MaterialTheme.typography.bodyMedium,
                 color = contentColor
             )
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            Text(
-                text = "R0=${preferences.breathingIntervalDurationMaxSeconds}s, " +
-                        "Rn=${preferences.breathingIntervalDurationMinSeconds}s",
-                style = MaterialTheme.typography.bodySmall,
-                color = contentColor.copy(alpha = 0.6f)
-            )
         }
     }
 }

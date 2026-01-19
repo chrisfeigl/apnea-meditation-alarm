@@ -89,9 +89,9 @@ fun HomeScreen(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(16.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
+                    .padding(16.dp)
             ) {
+                // Header row with title and intensity
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -118,26 +118,60 @@ fun HomeScreen(
 
                 Spacer(modifier = Modifier.height(16.dp))
 
+                // Summary row
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column {
+                        Text(
+                            text = "Breath Holds",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = intensityContentColor.copy(alpha = 0.7f)
+                        )
+                        Text(
+                            text = "${preferences.numberOfIntervals} x ${preferences.breathHoldDurationSeconds}s",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = intensityContentColor
+                        )
+                    }
+                    Column(horizontalAlignment = Alignment.End) {
+                        Text(
+                            text = "Total Time",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = intensityContentColor.copy(alpha = 0.7f)
+                        )
+                        Text(
+                            text = formatDuration(preferences.totalSessionTimeSeconds),
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = intensityContentColor
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
                 Text(
-                    text = "${preferences.numberOfIntervals} breath-hold cycles",
-                    style = MaterialTheme.typography.bodyLarge,
+                    text = "Breathing Intervals",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = intensityContentColor.copy(alpha = 0.7f)
+                )
+
+                Spacer(modifier = Modifier.height(4.dp))
+
+                // Show all breathing intervals
+                val intervals = (0 until preferences.numberOfIntervals).map { i ->
+                    preferences.breathingIntervalDuration(i)
+                }
+
+                Text(
+                    text = intervals.joinToString(" \u2192 ") { "${it}s" },
+                    style = MaterialTheme.typography.bodyMedium,
                     color = intensityContentColor
                 )
 
-                Text(
-                    text = "Hold: ${formatDuration(preferences.breathHoldDurationSeconds)} each",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = intensityContentColor.copy(alpha = 0.8f)
-                )
-
-                Text(
-                    text = "~${estimateSessionDuration(preferences)} min total",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = intensityContentColor.copy(alpha = 0.8f)
-                )
-
                 preferences.getNextAlarmInfo()?.let { (dayName, time) ->
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(modifier = Modifier.height(12.dp))
                     Text(
                         text = "Next alarm: $dayName at $time",
                         style = MaterialTheme.typography.bodyMedium,
@@ -195,17 +229,4 @@ private fun formatDuration(totalSeconds: Int): String {
     } else {
         "${seconds}s"
     }
-}
-
-private fun estimateSessionDuration(preferences: UserPreferences): Int {
-    // 54s intro bowl + 3s silence + 3s countdown + N cycles of (hold + breathe time)
-    val holdTime = preferences.breathHoldDurationSeconds
-
-    var totalBreathTime = 0
-    for (i in 0 until preferences.numberOfIntervals - 1) {
-        totalBreathTime += preferences.breathingIntervalDuration(i)
-    }
-
-    val totalSeconds = 54 + 3 + 3 + (holdTime * preferences.numberOfIntervals) + totalBreathTime
-    return (totalSeconds / 60) + 1
 }
