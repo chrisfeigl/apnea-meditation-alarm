@@ -44,17 +44,14 @@ fun HomeScreen(
     val nextAlarm = alarms
         .filter { it.enabled }
         .mapNotNull { alarm ->
-            alarm.getNextAlarmInfo()?.let { info -> alarm to info }
-        }
-        .minByOrNull { (alarm, _) ->
-            // Sort by next occurrence (simplified - just use days ahead heuristic)
-            val (dayName, _) = alarm.getNextAlarmInfo()!!
-            when (dayName) {
-                "Today" -> 0
-                "Tomorrow" -> 1
-                else -> 2
+            alarm.getNextAlarmInfo()?.let { info ->
+                alarm.getMinutesUntilNextAlarm()?.let { minutes ->
+                    Triple(alarm, info, minutes)
+                }
             }
         }
+        .minByOrNull { (_, _, minutes) -> minutes }
+        ?.let { (alarm, info, _) -> alarm to info }
 
     Column(
         modifier = Modifier

@@ -15,6 +15,7 @@ import com.apneaalarm.data.TrainingMode
 import com.apneaalarm.data.UserPreferences
 import com.apneaalarm.session.SessionProgress
 import com.apneaalarm.ui.screens.AlarmEditScreen
+import com.apneaalarm.ui.screens.EditSavedSessionScreen
 import com.apneaalarm.ui.screens.HomeScreen
 import com.apneaalarm.ui.screens.NewSessionScreen
 import com.apneaalarm.ui.screens.SavedSessionsScreen
@@ -32,6 +33,9 @@ sealed class Screen(val route: String) {
     object SavedSessions : Screen("saved_sessions")
     object AlarmEdit : Screen("alarm_edit/{alarmId}") {
         fun createRoute(alarmId: Long?) = "alarm_edit/${alarmId ?: -1}"
+    }
+    object EditSavedSession : Screen("edit_saved_session/{sessionId}") {
+        fun createRoute(sessionId: Long) = "edit_saved_session/$sessionId"
     }
 }
 
@@ -61,7 +65,11 @@ fun ApneaNavGraph(
     // Setup
     onCompleteSetup: (TrainingMode, Int) -> Unit,
     // Get alarm by ID (for edit screen)
-    getAlarmById: (Long) -> Alarm?
+    getAlarmById: (Long) -> Alarm?,
+    // Get saved session by ID (for edit screen)
+    getSavedSessionById: (Long) -> SavedSession?,
+    // Update saved session
+    onUpdateSavedSession: (SavedSession) -> Unit
 ) {
     val preferences by preferencesFlow.collectAsState()
     val alarms by alarmsFlow.collectAsState()
@@ -186,16 +194,15 @@ fun ApneaNavGraph(
                 savedSessions = savedSessions,
                 globalM = globalM,
                 onNavigateBack = { navController.popBackStack() },
-                onSessionSelected = { savedSession ->
-                    // Navigate to NewSession with the saved session's settings
-                    navController.popBackStack()
-                    navController.navigate(Screen.NewSession.route)
-                    // The settings will be loaded via the route - we need to pass them somehow
-                    // For now, we'll start the session directly
+                onStartSession = { savedSession ->
                     onStartSessionWithSettings(savedSession.sessionSettings)
                     navController.navigate(Screen.Session.route) {
                         popUpTo(Screen.SavedSessions.route) { inclusive = true }
                     }
+                },
+                onEditSession = { savedSession ->
+                    // Navigate to edit screen for this saved session
+                    navController.navigate(Screen.EditSavedSession.createRoute(savedSession.id))
                 },
                 onDeleteSession = onDeleteSavedSession
             )
@@ -223,6 +230,36 @@ fun ApneaNavGraph(
                     navController.popBackStack()
                 }
             )
+        }
+
+        composable(
+            route = Screen.EditSavedSession.route,
+            arguments = listOf(navArgument("sessionId") { type = NavType.LongType })
+        ) { backStackEntry ->
+            val sessionId = backStackEntry.arguments?.getLong("sessionId") ?: -1L
+            val savedSession = getSavedSessionById(sessionId)
+
+            if (savedSession != null) {
+                EditSavedSessionScreen(
+                    savedSession = savedSession,
+                    globalM = globalM,
+                    onNavigateBack = { navController.popBackStack() },
+                    onSaveSession = { updatedSession ->
+                        onUpdateSavedSession(updatedSession)
+                        navController.popBackStack()
+                    },
+                    onDeleteSession = { id ->
+                        onDeleteSavedSession(id)
+                        navController.popBackStack()
+                    },
+                    onStartSession = { settings ->
+                        onStartSessionWithSettings(settings)
+                        navController.navigate(Screen.Session.route) {
+                            popUpTo(Screen.EditSavedSession.route) { inclusive = true }
+                        }
+                    }
+                )
+            }
         }
     }
 }

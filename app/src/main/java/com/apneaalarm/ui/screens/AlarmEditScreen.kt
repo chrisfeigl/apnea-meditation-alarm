@@ -1,5 +1,7 @@
 package com.apneaalarm.ui.screens
 
+import android.media.MediaPlayer
+import android.net.Uri
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -29,16 +31,19 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import com.apneaalarm.R
 import com.apneaalarm.data.Alarm
 import com.apneaalarm.data.IntensityLevel
 import com.apneaalarm.data.SessionSettings
@@ -123,11 +128,8 @@ fun AlarmEditScreen(
                 trainingMode = currentAlarm.sessionSettings.trainingMode,
                 onTrainingModeChanged = { mode ->
                     val newSettings = currentAlarm.sessionSettings.copy(trainingMode = mode)
-                    val updatedSettings = if (!newSettings.useManualIntervalSettings) {
-                        updateManualParamsForModeAlarm(newSettings, globalM, mode)
-                    } else {
-                        newSettings
-                    }
+                    // Always reset manual params to defaults for the selected mode
+                    val updatedSettings = updateManualParamsForModeAlarm(newSettings, globalM, mode)
                     currentAlarm = currentAlarm.copy(sessionSettings = updatedSettings)
                 }
             )
@@ -752,7 +754,42 @@ private fun AlarmAudioSettingsCard(
     onSettingsChanged: (SessionSettings) -> Unit,
     onAudioFilesClick: () -> Unit
 ) {
+    val context = LocalContext.current
     var expanded by remember { mutableStateOf(false) }
+    var mediaPlayer by remember { mutableStateOf<MediaPlayer?>(null) }
+
+    // Cleanup media player on dispose
+    DisposableEffect(Unit) {
+        onDispose {
+            mediaPlayer?.release()
+            mediaPlayer = null
+        }
+    }
+
+    fun playPreviewSound(soundType: String, customUri: String?, volume: Float) {
+        mediaPlayer?.release()
+        try {
+            mediaPlayer = if (customUri != null) {
+                MediaPlayer.create(context, Uri.parse(customUri))
+            } else {
+                when (soundType) {
+                    "intro_bowl" -> MediaPlayer.create(context, R.raw.bowl)
+                    "breath_chime" -> MediaPlayer.create(context, R.raw.chime_breath)
+                    "hold_chime" -> MediaPlayer.create(context, R.raw.chime_hold)
+                    else -> null
+                }
+            }
+            mediaPlayer?.setVolume(volume, volume)
+            mediaPlayer?.setOnCompletionListener { mp ->
+                mp.release()
+                if (mediaPlayer == mp) mediaPlayer = null
+            }
+            mediaPlayer?.start()
+        } catch (e: Exception) {
+            mediaPlayer?.release()
+            mediaPlayer = null
+        }
+    }
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -772,17 +809,35 @@ private fun AlarmAudioSettingsCard(
             if (expanded) {
                 Spacer(modifier = Modifier.height(16.dp))
 
-                AlarmVolumeSlider("Intro Bowl", settings.introBowlVolumeMultiplier) {
-                    onSettingsChanged(settings.copy(introBowlVolumeMultiplier = it))
-                }
+                AlarmVolumeSlider(
+                    label = "Intro Bowl",
+                    value = settings.introBowlVolumeMultiplier,
+                    onValueChange = { onSettingsChanged(settings.copy(introBowlVolumeMultiplier = it)) },
+                    onValueChangeFinished = {
+                        val volume = settings.introBowlVolumeMultiplier / 10f
+                        playPreviewSound("intro_bowl", settings.customIntroBowlUri, volume)
+                    }
+                )
                 Spacer(modifier = Modifier.height(12.dp))
-                AlarmVolumeSlider("Breath Chime", settings.breathChimeVolumeMultiplier) {
-                    onSettingsChanged(settings.copy(breathChimeVolumeMultiplier = it))
-                }
+                AlarmVolumeSlider(
+                    label = "Breath Chime",
+                    value = settings.breathChimeVolumeMultiplier,
+                    onValueChange = { onSettingsChanged(settings.copy(breathChimeVolumeMultiplier = it)) },
+                    onValueChangeFinished = {
+                        val volume = settings.breathChimeVolumeMultiplier / 10f
+                        playPreviewSound("breath_chime", settings.customBreathChimeUri, volume)
+                    }
+                )
                 Spacer(modifier = Modifier.height(12.dp))
-                AlarmVolumeSlider("Hold Chime", settings.holdChimeVolumeMultiplier) {
-                    onSettingsChanged(settings.copy(holdChimeVolumeMultiplier = it))
-                }
+                AlarmVolumeSlider(
+                    label = "Hold Chime",
+                    value = settings.holdChimeVolumeMultiplier,
+                    onValueChange = { onSettingsChanged(settings.copy(holdChimeVolumeMultiplier = it)) },
+                    onValueChangeFinished = {
+                        val volume = settings.holdChimeVolumeMultiplier / 10f
+                        playPreviewSound("hold_chime", settings.customHoldChimeUri, volume)
+                    }
+                )
 
                 Spacer(modifier = Modifier.height(16.dp))
 
@@ -816,7 +871,8 @@ private fun AlarmAudioSettingsCard(
 private fun AlarmVolumeSlider(
     label: String,
     value: Int,
-    onValueChange: (Int) -> Unit
+    onValueChange: (Int) -> Unit,
+    onValueChangeFinished: (() -> Unit)? = null
 ) {
     Column {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -826,6 +882,7 @@ private fun AlarmVolumeSlider(
         Slider(
             value = value.toFloat(),
             onValueChange = { onValueChange(it.toInt()) },
+            onValueChangeFinished = onValueChangeFinished,
             valueRange = 1f..10f,
             steps = 8,
             modifier = Modifier.fillMaxWidth()

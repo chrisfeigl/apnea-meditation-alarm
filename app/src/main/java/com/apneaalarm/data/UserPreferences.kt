@@ -231,6 +231,56 @@ data class Alarm(
 
         return null
     }
+
+    // Get the number of minutes until the next alarm occurrence
+    // Returns null if alarm is disabled or no days are selected
+    fun getMinutesUntilNextAlarm(): Int? {
+        if (!enabled || days.isEmpty()) return null
+
+        val calendar = java.util.Calendar.getInstance()
+        val currentDayOfWeek = when (calendar.get(java.util.Calendar.DAY_OF_WEEK)) {
+            java.util.Calendar.MONDAY -> 1
+            java.util.Calendar.TUESDAY -> 2
+            java.util.Calendar.WEDNESDAY -> 3
+            java.util.Calendar.THURSDAY -> 4
+            java.util.Calendar.FRIDAY -> 5
+            java.util.Calendar.SATURDAY -> 6
+            java.util.Calendar.SUNDAY -> 7
+            else -> 1
+        }
+        val currentHour = calendar.get(java.util.Calendar.HOUR_OF_DAY)
+        val currentMinute = calendar.get(java.util.Calendar.MINUTE)
+
+        // Current time in minutes since midnight
+        val currentTimeMinutes = currentHour * 60 + currentMinute
+        // Alarm time in minutes since midnight
+        val alarmTimeMinutes = hour * 60 + minute
+
+        // Check if alarm time has passed today
+        val alarmPassedToday = currentTimeMinutes >= alarmTimeMinutes
+
+        // Find next alarm day
+        for (daysAhead in 0..7) {
+            val checkDay = ((currentDayOfWeek - 1 + daysAhead) % 7) + 1
+
+            // Skip today if alarm already passed
+            if (daysAhead == 0 && alarmPassedToday) continue
+
+            if (checkDay in days) {
+                // Calculate minutes until alarm
+                val minutesInDay = 24 * 60
+                return if (daysAhead == 0) {
+                    // Today, alarm hasn't passed yet
+                    alarmTimeMinutes - currentTimeMinutes
+                } else {
+                    // Future day
+                    (daysAhead * minutesInDay) + alarmTimeMinutes - currentTimeMinutes
+                }
+            }
+        }
+
+        return null
+    }
 }
 
 /**

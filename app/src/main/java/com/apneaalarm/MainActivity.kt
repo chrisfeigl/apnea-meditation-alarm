@@ -52,6 +52,8 @@ class MainActivity : ComponentActivity() {
 
     // Cache of alarms for quick access in composable
     private var alarmsCache: List<Alarm> = emptyList()
+    // Cache of saved sessions for quick access in composable
+    private var savedSessionsCache: List<SavedSession> = emptyList()
 
     private var sessionService: SessionService? = null
     private var serviceBound by mutableStateOf(false)
@@ -71,6 +73,12 @@ class MainActivity : ComponentActivity() {
             lifecycleScope.launch {
                 sessionService?.sessionProgress?.collect { progress ->
                     sessionProgressFlow.value = progress
+                    // Update snooze state whenever session progress updates
+                    // This ensures snooze state is correct for alarm-triggered sessions
+                    sessionService?.let { svc ->
+                        snoozeEnabledFlow.value = svc.snoozeEnabled
+                        snoozeDurationFlow.value = svc.snoozeDuration
+                    }
                 }
             }
         }
@@ -114,6 +122,7 @@ class MainActivity : ComponentActivity() {
         lifecycleScope.launch {
             preferencesRepository.savedSessionsFlow.collect { sessions ->
                 savedSessionsFlow.value = sessions
+                savedSessionsCache = sessions
             }
         }
 
@@ -176,6 +185,12 @@ class MainActivity : ComponentActivity() {
                         },
                         getAlarmById = { alarmId ->
                             alarmsCache.find { it.id == alarmId }
+                        },
+                        getSavedSessionById = { sessionId ->
+                            savedSessionsCache.find { it.id == sessionId }
+                        },
+                        onUpdateSavedSession = { savedSession ->
+                            handleUpdateSavedSession(savedSession)
                         }
                     )
                 }
@@ -272,6 +287,12 @@ class MainActivity : ComponentActivity() {
     private fun handleDeleteSavedSession(sessionId: Long) {
         lifecycleScope.launch {
             preferencesRepository.deleteSavedSession(sessionId)
+        }
+    }
+
+    private fun handleUpdateSavedSession(savedSession: SavedSession) {
+        lifecycleScope.launch {
+            preferencesRepository.updateSavedSession(savedSession)
         }
     }
 

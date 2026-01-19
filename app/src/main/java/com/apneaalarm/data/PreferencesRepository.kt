@@ -349,6 +349,11 @@ class PreferencesRepository(private val context: Context) {
         }
     }
 
+    // Update saved session (alias for saveSession, which handles updates)
+    suspend fun updateSavedSession(session: SavedSession) {
+        saveSession(session)
+    }
+
     // Delete saved session
     suspend fun deleteSavedSession(sessionId: Long) {
         context.dataStore.edit { preferences ->
