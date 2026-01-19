@@ -6,9 +6,9 @@ enum class TrainingMode {
 }
 
 enum class IntensityLevel(val label: String, val description: String) {
-    CALM("Calm", "Recovery focused"),
-    CHALLENGING("Challenging", "Controlled stress"),
-    HIGH_STRESS("High Stress", "Adaptation training"),
+    CALM("Calm", "Recovery"),
+    CHALLENGING("Challenging", "Controlled"),
+    HARD_TRAINING("Hard Training", "Demanding"),
     ADVANCED("Advanced", "Infrequent use")
 }
 
@@ -145,8 +145,7 @@ data class UserPreferences(
         }
 
     // Intensity Factor (1-100)
-    // CO₂ stress accumulation model using actual generated rest intervals
-    // Measures unrecovered CO₂ debt relative to capacity
+    // Simple score reflecting: hold vs max, recovery shortness, and round count
     val intensityFactor: Int
         get() {
             val m = maxStaticBreathHoldDurationSeconds.toDouble()
@@ -155,35 +154,27 @@ data class UserPreferences(
 
             if (m <= 0 || h <= 0 || n <= 1) return 1
 
-            // Step 1-3: Compute weighted cumulative CO₂ load from actual intervals
-            // Si = H / (H + Ri) - per-round stress (shorter rest = higher stress)
-            // wi = (i+1) / N - later rounds weighted more (accumulation effect)
-            // L = (1/N) * sum(wi * Si)
-            var sum = 0.0
-            val numRestIntervals = n - 1  // N-1 rest intervals for N breath holds
-            for (i in 0 until numRestIntervals) {
-                val ri = breathingIntervalDuration(i).toDouble()
-                val si = h / (h + ri)           // Round stress: 0 (long rest) to 1 (no rest)
-                val wi = (i + 1).toDouble() / n // Accumulation weight
-                sum += wi * si
-            }
-            val cumulativeLoad = sum / n
+            // Calculate average rest interval from actual generated intervals
+            val numRestIntervals = n - 1
+            val avgRest = (0 until numRestIntervals)
+                .map { breathingIntervalDuration(it).toDouble() }
+                .average()
 
-            // Step 4: Scale by proximity to max hold
-            // Operating closer to max magnifies intensity
-            val proximityToMax = Math.pow(h / m, 1.2)
+            // intensity = 100 * (H/M) * (H/(H+avgRest)) * (N/12)
+            val holdRatio = h / m                    // How close hold is to max
+            val recoveryStress = h / (h + avgRest)  // Shorter rest = higher stress
+            val roundFactor = n.toDouble() / 12.0   // More rounds = harder
 
-            // Step 5: Final intensity (1-100)
-            val intensity = (100.0 * cumulativeLoad * proximityToMax).toInt()
-            return intensity.coerceIn(1, 100)
+            val intensity = 100.0 * holdRatio * recoveryStress * roundFactor
+            return intensity.toInt().coerceIn(1, 100)
         }
 
     // Intensity level category based on intensity factor
     val intensityLevel: IntensityLevel
         get() = when {
-            intensityFactor < 40 -> IntensityLevel.CALM
-            intensityFactor < 70 -> IntensityLevel.CHALLENGING
-            intensityFactor < 90 -> IntensityLevel.HIGH_STRESS
+            intensityFactor <= 25 -> IntensityLevel.CALM
+            intensityFactor <= 50 -> IntensityLevel.CHALLENGING
+            intensityFactor <= 75 -> IntensityLevel.HARD_TRAINING
             else -> IntensityLevel.ADVANCED
         }
 }

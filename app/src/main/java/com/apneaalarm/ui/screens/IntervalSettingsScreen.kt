@@ -424,13 +424,13 @@ private fun SessionPreviewCard(preferences: UserPreferences) {
     val containerColor = when (preferences.intensityLevel) {
         IntensityLevel.CALM -> Color(0xFF4CAF50)           // Green
         IntensityLevel.CHALLENGING -> Color(0xFFFFC107)    // Amber
-        IntensityLevel.HIGH_STRESS -> Color(0xFFFF9800)    // Orange
+        IntensityLevel.HARD_TRAINING -> Color(0xFFFF9800)    // Orange
         IntensityLevel.ADVANCED -> Color(0xFFF44336)       // Red
     }
     val contentColor = when (preferences.intensityLevel) {
         IntensityLevel.CALM -> Color.White
         IntensityLevel.CHALLENGING -> Color.Black
-        IntensityLevel.HIGH_STRESS -> Color.Black
+        IntensityLevel.HARD_TRAINING -> Color.Black
         IntensityLevel.ADVANCED -> Color.White
     }
 
