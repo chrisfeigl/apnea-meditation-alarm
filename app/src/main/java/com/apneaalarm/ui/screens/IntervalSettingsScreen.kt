@@ -336,6 +336,7 @@ private fun ManualSettingsCard(
                 label = "H (Breath Hold)",
                 value = hText,
                 suffix = "s",
+                description = "Duration of each breath hold",
                 onValueChange = { newValue ->
                     hText = newValue
                     newValue.toIntOrNull()?.let { onManualSettingsChanged(it, null, null, null, null) }
@@ -352,6 +353,7 @@ private fun ManualSettingsCard(
                 label = "R0 (Max Breathing)",
                 value = r0Text,
                 suffix = "s",
+                description = "First breathing interval",
                 onValueChange = { newValue ->
                     r0Text = newValue
                     newValue.toIntOrNull()?.let { onManualSettingsChanged(null, it, null, null, null) }
@@ -368,6 +370,7 @@ private fun ManualSettingsCard(
                 label = "Rn (Min Breathing)",
                 value = rnText,
                 suffix = "s",
+                description = "Final breathing interval",
                 onValueChange = { newValue ->
                     rnText = newValue
                     newValue.toIntOrNull()?.let { onManualSettingsChanged(null, null, it, null, null) }
@@ -384,6 +387,7 @@ private fun ManualSettingsCard(
                 label = "N (Intervals)",
                 value = nText,
                 suffix = "",
+                description = "Number of breath hold cycles",
                 onValueChange = { newValue ->
                     nText = newValue
                     newValue.toIntOrNull()?.let { onManualSettingsChanged(null, null, null, it, null) }
@@ -401,11 +405,16 @@ private fun ManualSettingsCard(
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSecondaryContainer
             )
+            Text(
+                text = "How quickly breathing intervals shorten",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.6f)
+            )
             Slider(
                 value = pValue,
                 onValueChange = { pValue = it },
                 onValueChangeFinished = { onManualSettingsChanged(null, null, null, null, pValue) },
-                valueRange = 0.1f..3.0f,
+                valueRange = 0.1f..2.0f,
                 modifier = Modifier.fillMaxWidth()
             )
             Row(
@@ -457,6 +466,7 @@ private fun NumberInputRow(
     label: String,
     value: String,
     suffix: String,
+    description: String? = null,
     onValueChange: (String) -> Unit
 ) {
     Row(
@@ -464,12 +474,20 @@ private fun NumberInputRow(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSecondaryContainer,
-            modifier = Modifier.weight(1f)
-        )
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSecondaryContainer
+            )
+            if (description != null) {
+                Text(
+                    text = description,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.6f)
+                )
+            }
+        }
         OutlinedTextField(
             value = value,
             onValueChange = onValueChange,

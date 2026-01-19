@@ -21,6 +21,7 @@ class PreferencesRepository(private val context: Context) {
         val ALARM_HOUR = intPreferencesKey("alarm_hour")
         val ALARM_MINUTE = intPreferencesKey("alarm_minute")
         val ALARM_ENABLED = booleanPreferencesKey("alarm_enabled")
+        val ALARM_DAYS = stringPreferencesKey("alarm_days") // Comma-separated day numbers (1-7)
         val FIRST_TIME_SETUP_COMPLETE = booleanPreferencesKey("first_time_setup_complete")
 
         // Training mode
@@ -61,10 +62,22 @@ class PreferencesRepository(private val context: Context) {
             else -> TrainingMode.RELAXATION
         }
 
+        // Parse alarm days from comma-separated string, default to all days
+        val alarmDaysString = preferences[PreferencesKeys.ALARM_DAYS]
+        val alarmDays = if (alarmDaysString != null) {
+            alarmDaysString.split(",")
+                .mapNotNull { it.trim().toIntOrNull() }
+                .filter { it in 1..7 }
+                .toSet()
+        } else {
+            setOf(1, 2, 3, 4, 5, 6, 7)
+        }
+
         UserPreferences(
             alarmHour = preferences[PreferencesKeys.ALARM_HOUR] ?: 7,
             alarmMinute = preferences[PreferencesKeys.ALARM_MINUTE] ?: 0,
             alarmEnabled = preferences[PreferencesKeys.ALARM_ENABLED] ?: false,
+            alarmDays = alarmDays,
             isFirstTimeSetupComplete = preferences[PreferencesKeys.FIRST_TIME_SETUP_COMPLETE] ?: false,
             trainingMode = trainingMode,
             maxStaticBreathHoldDurationSeconds = preferences[PreferencesKeys.MAX_STATIC_BREATH_HOLD_DURATION] ?: 60,
@@ -95,6 +108,13 @@ class PreferencesRepository(private val context: Context) {
     suspend fun updateAlarmEnabled(enabled: Boolean) {
         context.dataStore.edit { preferences ->
             preferences[PreferencesKeys.ALARM_ENABLED] = enabled
+        }
+    }
+
+    suspend fun updateAlarmDays(days: Set<Int>) {
+        context.dataStore.edit { preferences ->
+            val validDays = days.filter { it in 1..7 }.toSet()
+            preferences[PreferencesKeys.ALARM_DAYS] = validDays.sorted().joinToString(",")
         }
     }
 
@@ -196,6 +216,7 @@ class PreferencesRepository(private val context: Context) {
             preferences[PreferencesKeys.ALARM_HOUR] = prefs.alarmHour
             preferences[PreferencesKeys.ALARM_MINUTE] = prefs.alarmMinute
             preferences[PreferencesKeys.ALARM_ENABLED] = prefs.alarmEnabled
+            preferences[PreferencesKeys.ALARM_DAYS] = prefs.alarmDays.sorted().joinToString(",")
             preferences[PreferencesKeys.FIRST_TIME_SETUP_COMPLETE] = prefs.isFirstTimeSetupComplete
             preferences[PreferencesKeys.TRAINING_MODE] = prefs.trainingMode.name
             preferences[PreferencesKeys.MAX_STATIC_BREATH_HOLD_DURATION] = prefs.maxStaticBreathHoldDurationSeconds

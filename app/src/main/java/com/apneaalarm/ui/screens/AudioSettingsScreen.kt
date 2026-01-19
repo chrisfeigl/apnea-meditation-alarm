@@ -195,13 +195,13 @@ private fun VolumeSettingsCard(
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "Fade In Intro Bowl",
+                        text = "Fade in Intro",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Text(
                         text = if (preferences.fadeInIntroBowl)
-                            "Gradually increase volume over 48 seconds"
+                            "Gradually increase intro volume"
                         else
                             "Play at full volume immediately",
                         style = MaterialTheme.typography.bodySmall,

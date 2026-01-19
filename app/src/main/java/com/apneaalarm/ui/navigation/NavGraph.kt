@@ -39,6 +39,7 @@ fun ApneaNavGraph(
     onSnooze: () -> Unit,
     onAlarmEnabledChanged: (Boolean) -> Unit,
     onAlarmTimeChanged: (Int, Int) -> Unit,
+    onAlarmDaysChanged: (Set<Int>) -> Unit,
     onBreathHoldChanged: (Int) -> Unit,
     onIntroBowlVolumeChanged: (Int) -> Unit,
     onBreathChimeVolumeChanged: (Int) -> Unit,
@@ -134,6 +135,7 @@ fun ApneaNavGraph(
                 },
                 onAlarmEnabledChanged = onAlarmEnabledChanged,
                 onAlarmTimeChanged = onAlarmTimeChanged,
+                onAlarmDaysChanged = onAlarmDaysChanged,
                 onSnoozeDurationChanged = onSnoozeDurationChanged
             )
         }

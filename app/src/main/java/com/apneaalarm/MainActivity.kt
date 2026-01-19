@@ -125,6 +125,9 @@ class MainActivity : ComponentActivity() {
                         onAlarmTimeChanged = { hour, minute ->
                             handleAlarmTimeChanged(hour, minute)
                         },
+                        onAlarmDaysChanged = { days ->
+                            handleAlarmDaysChanged(days)
+                        },
                         onBreathHoldChanged = { seconds ->
                             handleBreathHoldChanged(seconds)
                         },
@@ -241,6 +244,17 @@ class MainActivity : ComponentActivity() {
             val prefs = preferencesRepository.userPreferences.first()
             if (prefs.alarmEnabled) {
                 alarmScheduler.scheduleAlarm(hour, minute)
+            }
+        }
+    }
+
+    private fun handleAlarmDaysChanged(days: Set<Int>) {
+        lifecycleScope.launch {
+            preferencesRepository.updateAlarmDays(days)
+            // Reschedule alarm if enabled
+            val prefs = preferencesRepository.userPreferences.first()
+            if (prefs.alarmEnabled) {
+                alarmScheduler.scheduleAlarm(prefs.alarmHour, prefs.alarmMinute)
             }
         }
     }

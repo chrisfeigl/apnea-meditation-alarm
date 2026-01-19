@@ -136,10 +136,10 @@ fun HomeScreen(
                     color = intensityContentColor.copy(alpha = 0.8f)
                 )
 
-                if (preferences.alarmEnabled) {
+                preferences.getNextAlarmInfo()?.let { (dayName, time) ->
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        text = "Alarm: ${String.format("%02d:%02d", preferences.alarmHour, preferences.alarmMinute)}",
+                        text = "Next alarm: $dayName at $time",
                         style = MaterialTheme.typography.bodyMedium,
                         color = intensityContentColor
                     )

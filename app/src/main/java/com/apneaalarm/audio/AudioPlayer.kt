@@ -175,10 +175,12 @@ class AudioPlayer(private val context: Context) {
                     player.setVolume(0f, 0f)
                     player.start()
 
-                    // Fade in over 48 seconds
+                    // Fade in over 48 seconds with accelerated curve (sqrt)
+                    // Reaches ~50% volume at 25% time, ~71% at 50% time
                     for (elapsed in 0 until 48) {
                         if (!scope.isActive) break
-                        val volume = (elapsed / 48.0f) * maxVolume
+                        val progress = elapsed / 48.0
+                        val volume = (kotlin.math.sqrt(progress) * maxVolume).toFloat()
                         player.setVolume(volume, volume)
                         onProgress(elapsed)
                         delay(1000)
@@ -242,10 +244,12 @@ class AudioPlayer(private val context: Context) {
                     player.setVolume(0f, 0f)
                     player.start()
 
-                    // Fade in over 48 seconds
+                    // Fade in over 48 seconds with accelerated curve (sqrt)
+                    // Reaches ~50% volume at 25% time, ~71% at 50% time
                     for (elapsed in 0 until 48) {
                         if (!scope.isActive) break
-                        val volume = (elapsed / 48.0f) * maxVolume
+                        val progress = elapsed / 48.0
+                        val volume = (kotlin.math.sqrt(progress) * maxVolume).toFloat()
                         player.setVolume(volume, volume)
                         onProgress(elapsed)
                         delay(1000)

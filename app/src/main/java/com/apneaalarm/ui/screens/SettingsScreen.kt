@@ -9,12 +9,16 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
@@ -42,6 +46,7 @@ fun SettingsScreen(
     onNavigateToAudioSettings: () -> Unit,
     onAlarmEnabledChanged: (Boolean) -> Unit,
     onAlarmTimeChanged: (Int, Int) -> Unit,
+    onAlarmDaysChanged: (Set<Int>) -> Unit,
     onSnoozeDurationChanged: (Int) -> Unit
 ) {
     var showTimePicker by remember { mutableStateOf(false) }
@@ -72,6 +77,7 @@ fun SettingsScreen(
                 preferences = preferences,
                 onAlarmEnabledChanged = onAlarmEnabledChanged,
                 onChangeTimeClick = { showTimePicker = true },
+                onAlarmDaysChanged = onAlarmDaysChanged,
                 onSnoozeDurationChanged = onSnoozeDurationChanged
             )
 
@@ -110,11 +116,13 @@ fun SettingsScreen(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun AlarmSettingsCard(
     preferences: UserPreferences,
     onAlarmEnabledChanged: (Boolean) -> Unit,
     onChangeTimeClick: () -> Unit,
+    onAlarmDaysChanged: (Set<Int>) -> Unit,
     onSnoozeDurationChanged: (Int) -> Unit
 ) {
     Card(
@@ -163,6 +171,44 @@ private fun AlarmSettingsCard(
                 )
                 Button(onClick = onChangeTimeClick) {
                     Text("Change")
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Day selection
+            Text(
+                text = "Repeat",
+                style = MaterialTheme.typography.bodyMedium
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                val dayLabels = listOf("M", "T", "W", "T", "F", "S", "S")
+                dayLabels.forEachIndexed { index, label ->
+                    val dayNumber = index + 1
+                    val isSelected = dayNumber in preferences.alarmDays
+                    FilterChip(
+                        selected = isSelected,
+                        onClick = {
+                            val newDays = if (isSelected) {
+                                preferences.alarmDays - dayNumber
+                            } else {
+                                preferences.alarmDays + dayNumber
+                            }
+                            onAlarmDaysChanged(newDays)
+                        },
+                        label = { Text(label) },
+                        modifier = Modifier.width(40.dp),
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = MaterialTheme.colorScheme.primary,
+                            selectedLabelColor = MaterialTheme.colorScheme.onPrimary
+                        )
+                    )
                 }
             }
 

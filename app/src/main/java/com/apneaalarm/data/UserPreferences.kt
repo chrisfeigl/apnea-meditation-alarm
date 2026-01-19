@@ -17,6 +17,7 @@ data class UserPreferences(
     val alarmHour: Int = 7,
     val alarmMinute: Int = 0,
     val alarmEnabled: Boolean = false,
+    val alarmDays: Set<Int> = setOf(1, 2, 3, 4, 5, 6, 7), // Days of week (1=Mon, 7=Sun), all days by default
     val isFirstTimeSetupComplete: Boolean = false,
 
     // Training mode
@@ -176,4 +177,57 @@ data class UserPreferences(
             intensityFactor <= 75 -> IntensityLevel.HARD_TRAINING
             else -> IntensityLevel.ADVANCED
         }
+
+    // Get the next alarm occurrence (returns pair of day name and time string)
+    // Returns null if alarm is disabled or no days are selected
+    fun getNextAlarmInfo(): Pair<String, String>? {
+        if (!alarmEnabled || alarmDays.isEmpty()) return null
+
+        val calendar = java.util.Calendar.getInstance()
+        val currentDayOfWeek = when (calendar.get(java.util.Calendar.DAY_OF_WEEK)) {
+            java.util.Calendar.MONDAY -> 1
+            java.util.Calendar.TUESDAY -> 2
+            java.util.Calendar.WEDNESDAY -> 3
+            java.util.Calendar.THURSDAY -> 4
+            java.util.Calendar.FRIDAY -> 5
+            java.util.Calendar.SATURDAY -> 6
+            java.util.Calendar.SUNDAY -> 7
+            else -> 1
+        }
+        val currentHour = calendar.get(java.util.Calendar.HOUR_OF_DAY)
+        val currentMinute = calendar.get(java.util.Calendar.MINUTE)
+
+        // Check if alarm time has passed today
+        val alarmPassedToday = currentHour > alarmHour ||
+            (currentHour == alarmHour && currentMinute >= alarmMinute)
+
+        // Find next alarm day
+        for (daysAhead in 0..7) {
+            val checkDay = ((currentDayOfWeek - 1 + daysAhead) % 7) + 1
+
+            // Skip today if alarm already passed
+            if (daysAhead == 0 && alarmPassedToday) continue
+
+            if (checkDay in alarmDays) {
+                val dayName = when {
+                    daysAhead == 0 -> "Today"
+                    daysAhead == 1 -> "Tomorrow"
+                    else -> when (checkDay) {
+                        1 -> "Monday"
+                        2 -> "Tuesday"
+                        3 -> "Wednesday"
+                        4 -> "Thursday"
+                        5 -> "Friday"
+                        6 -> "Saturday"
+                        7 -> "Sunday"
+                        else -> ""
+                    }
+                }
+                val timeString = String.format("%02d:%02d", alarmHour, alarmMinute)
+                return Pair(dayName, timeString)
+            }
+        }
+
+        return null
+    }
 }
