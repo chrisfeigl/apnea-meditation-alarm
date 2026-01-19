@@ -192,9 +192,8 @@ private fun IntroBowlButtons(
                     .height(56.dp)
             ) {
                 Text(
-                    text = "SNOOZE\n${snoozeDurationMinutes}m",
+                    text = "SNOOZE",
                     style = MaterialTheme.typography.titleMedium,
-                    textAlign = TextAlign.Center,
                     color = Color(0xFFFFB74D)
                 )
             }
