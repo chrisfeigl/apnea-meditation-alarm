@@ -1,0 +1,280 @@
+package com.apneaalarm.session
+
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
+import android.app.Service
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
+import android.os.Binder
+import android.os.Build
+import android.os.IBinder
+import android.os.PowerManager
+import androidx.core.app.NotificationCompat
+import com.apneaalarm.MainActivity
+import com.apneaalarm.R
+import com.apneaalarm.data.PreferencesRepository
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+
+class SessionService : Service() {
+
+    private val binder = LocalBinder()
+    private var breathingSession: BreathingSession? = null
+    private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+    private var wakeLock: PowerManager.WakeLock? = null
+    private var stopReceiver: BroadcastReceiver? = null
+
+    private val _sessionProgress = MutableStateFlow(SessionProgress())
+    val sessionProgress: StateFlow<SessionProgress> = _sessionProgress.asStateFlow()
+
+    companion object {
+        const val ACTION_START_SESSION = "com.apneaalarm.START_SESSION"
+        const val ACTION_STOP_SESSION = "com.apneaalarm.STOP_SESSION"
+        const val ACTION_STOP_BROADCAST = "com.apneaalarm.STOP_BROADCAST"
+        const val EXTRA_SKIP_INTRO = "skip_intro"
+        private const val NOTIFICATION_ID = 1
+        private const val CHANNEL_ID = "apnea_alarm_session"
+        private const val CHANNEL_ID_FINISH = "apnea_alarm_finish"
+    }
+
+    private var pendingSkipIntro = false
+
+    inner class LocalBinder : Binder() {
+        fun getService(): SessionService = this@SessionService
+    }
+
+    override fun onBind(intent: Intent?): IBinder = binder
+
+    override fun onCreate() {
+        super.onCreate()
+        createNotificationChannels()
+        acquireWakeLock()
+        registerStopReceiver()
+    }
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        when (intent?.action) {
+            ACTION_START_SESSION -> {
+                pendingSkipIntro = intent.getBooleanExtra(EXTRA_SKIP_INTRO, false)
+                startSession()
+            }
+            ACTION_STOP_SESSION -> stopSession()
+        }
+        return START_STICKY
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        unregisterStopReceiver()
+        stopSession()
+        releaseWakeLock()
+        serviceScope.cancel()
+    }
+
+    private fun registerStopReceiver() {
+        stopReceiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context?, intent: Intent?) {
+                if (intent?.action == ACTION_STOP_BROADCAST) {
+                    stopSession()
+                }
+            }
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(stopReceiver, IntentFilter(ACTION_STOP_BROADCAST), RECEIVER_NOT_EXPORTED)
+        } else {
+            registerReceiver(stopReceiver, IntentFilter(ACTION_STOP_BROADCAST))
+        }
+    }
+
+    private fun unregisterStopReceiver() {
+        stopReceiver?.let {
+            try {
+                unregisterReceiver(it)
+            } catch (e: Exception) {
+                // Receiver might not be registered
+            }
+        }
+        stopReceiver = null
+    }
+
+    private fun startSession() {
+        startForeground(NOTIFICATION_ID, createNotification("Apnea session starting...", false))
+
+        serviceScope.launch {
+            val repository = PreferencesRepository(applicationContext)
+            val prefs = repository.userPreferences.first()
+
+            breathingSession = BreathingSession(
+                context = applicationContext,
+                preferences = prefs,
+                skipIntro = pendingSkipIntro
+            )
+
+            breathingSession?.let { session ->
+                launch {
+                    session.progress.collect { progress ->
+                        _sessionProgress.value = progress
+                        updateNotification(progress)
+
+                        if (progress.state is SessionState.Stopped) {
+                            stopSelf()
+                        }
+                    }
+                }
+
+                session.start()
+            }
+        }
+    }
+
+    fun stopSession() {
+        breathingSession?.stop()
+        breathingSession = null
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        stopSelf()
+    }
+
+    private fun createNotificationChannels() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val sessionChannel = NotificationChannel(
+                CHANNEL_ID,
+                "Apnea Alarm Session",
+                NotificationManager.IMPORTANCE_LOW
+            ).apply {
+                description = "Shows progress during breathing session"
+                setShowBadge(false)
+            }
+
+            val finishChannel = NotificationChannel(
+                CHANNEL_ID_FINISH,
+                "Session Complete",
+                NotificationManager.IMPORTANCE_HIGH
+            ).apply {
+                description = "Alert when breathing session is complete"
+                setShowBadge(true)
+                enableVibration(true)
+                lockscreenVisibility = Notification.VISIBILITY_PUBLIC
+            }
+
+            val notificationManager = getSystemService(NotificationManager::class.java)
+            notificationManager.createNotificationChannel(sessionChannel)
+            notificationManager.createNotificationChannel(finishChannel)
+        }
+    }
+
+    private fun createNotification(contentText: String, isFinishing: Boolean): Notification {
+        val intent = Intent(this, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            putExtra("from_notification", true)
+            putExtra("show_session", true)
+        }
+
+        val pendingIntent = PendingIntent.getActivity(
+            this,
+            0,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val stopIntent = Intent(this, SessionService::class.java).apply {
+            action = ACTION_STOP_SESSION
+        }
+
+        val stopPendingIntent = PendingIntent.getService(
+            this,
+            1,
+            stopIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val channelId = if (isFinishing) CHANNEL_ID_FINISH else CHANNEL_ID
+
+        val builder = NotificationCompat.Builder(this, channelId)
+            .setContentTitle(if (isFinishing) "Session Complete!" else "Apnea Alarm")
+            .setContentText(contentText)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentIntent(pendingIntent)
+            .setOngoing(true)
+            .setAutoCancel(false)
+
+        if (isFinishing) {
+            builder.addAction(
+                NotificationCompat.Action.Builder(
+                    R.drawable.ic_stop,
+                    "STOP SESSION",
+                    stopPendingIntent
+                ).build()
+            )
+            builder.setFullScreenIntent(pendingIntent, true)
+            builder.setPriority(NotificationCompat.PRIORITY_HIGH)
+            builder.setCategory(NotificationCompat.CATEGORY_ALARM)
+            builder.setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+        } else {
+            builder.addAction(R.drawable.ic_stop, "Stop", stopPendingIntent)
+            builder.setSilent(true)
+        }
+
+        return builder.build()
+    }
+
+    private fun updateNotification(progress: SessionProgress) {
+        val isFinishing = progress.state is SessionState.Finishing
+
+        val text = when (val state = progress.state) {
+            is SessionState.IntroBowl -> {
+                val phaseText = when (state.phase) {
+                    SessionState.IntroBowl.IntroBowlPhase.FADING_IN -> "Waking up"
+                    SessionState.IntroBowl.IntroBowlPhase.HOLDING -> "Bowl at max"
+                    SessionState.IntroBowl.IntroBowlPhase.FADING_OUT -> "Bowl fading"
+                }
+                "$phaseText... ${state.elapsedSeconds}s"
+            }
+            is SessionState.PreHoldCountdown -> "Get ready... ${state.countdownSeconds}"
+            is SessionState.Holding -> {
+                val remaining = state.targetSeconds - state.elapsedSeconds
+                "HOLD - Cycle ${state.cycleIndex + 1}/${state.totalCycles} - ${remaining}s"
+            }
+            is SessionState.Breathing -> {
+                val remaining = state.targetSeconds - state.elapsedSeconds
+                "BREATHE - Cycle ${state.cycleIndex + 1}/${state.totalCycles} - ${remaining}s"
+            }
+            is SessionState.Finishing -> "Tap to open app and press STOP"
+            is SessionState.Stopped -> "Session ended"
+            is SessionState.Idle -> "Starting..."
+        }
+
+        val notification = createNotification(text, isFinishing)
+        val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        notificationManager.notify(NOTIFICATION_ID, notification)
+    }
+
+    private fun acquireWakeLock() {
+        val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
+        wakeLock = powerManager.newWakeLock(
+            PowerManager.PARTIAL_WAKE_LOCK,
+            "ApneaAlarm::SessionWakeLock"
+        ).apply {
+            acquire(60 * 60 * 1000L) // 1 hour max
+        }
+    }
+
+    private fun releaseWakeLock() {
+        wakeLock?.let {
+            if (it.isHeld) {
+                it.release()
+            }
+        }
+        wakeLock = null
+    }
+}
