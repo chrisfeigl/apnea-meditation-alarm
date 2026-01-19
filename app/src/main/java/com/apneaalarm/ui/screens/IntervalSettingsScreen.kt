@@ -87,7 +87,7 @@ fun IntervalSettingsScreen(
                             val rn = (0.25 * h).toInt().coerceAtLeast(3)
                             onManualSettingsChanged(h, r0, rn, 6, 1.4f)
                         }
-                        TrainingMode.INTENSE -> {
+                        TrainingMode.TRAINING -> {
                             val h = (0.90 * m).toInt()
                             val r0 = (0.50 * h).toInt()
                             val rn = (0.12 * h).toInt().coerceAtLeast(3)
@@ -115,7 +115,7 @@ fun IntervalSettingsScreen(
                                 val rn = (0.25 * h).toInt().coerceAtLeast(3)
                                 onManualSettingsChanged(h, r0, rn, 6, 1.4f)
                             }
-                            TrainingMode.INTENSE -> {
+                            TrainingMode.TRAINING -> {
                                 val h = (0.90 * m).toInt()
                                 val r0 = (0.50 * h).toInt()
                                 val rn = (0.12 * h).toInt().coerceAtLeast(3)
@@ -190,20 +190,20 @@ private fun TrainingModeCard(
                 }
 
                 OutlinedButton(
-                    onClick = { onTrainingModeChanged(TrainingMode.INTENSE) },
+                    onClick = { onTrainingModeChanged(TrainingMode.TRAINING) },
                     modifier = Modifier.weight(1f),
                     colors = ButtonDefaults.outlinedButtonColors(
-                        containerColor = if (preferences.trainingMode == TrainingMode.INTENSE)
+                        containerColor = if (preferences.trainingMode == TrainingMode.TRAINING)
                             MaterialTheme.colorScheme.tertiary
                         else
                             MaterialTheme.colorScheme.surfaceVariant,
-                        contentColor = if (preferences.trainingMode == TrainingMode.INTENSE)
+                        contentColor = if (preferences.trainingMode == TrainingMode.TRAINING)
                             MaterialTheme.colorScheme.onTertiary
                         else
                             MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 ) {
-                    Text("Intense")
+                    Text("Training")
                 }
             }
 
@@ -254,7 +254,7 @@ private fun TrainingModeCard(
 
                 val holdPercent = when (preferences.trainingMode) {
                     TrainingMode.RELAXATION -> "60%"
-                    TrainingMode.INTENSE -> "90%"
+                    TrainingMode.TRAINING -> "90%"
                 }
 
                 Text(
@@ -436,7 +436,7 @@ private fun ManualSettingsCard(
                             val rn = (0.25 * h).toInt().coerceAtLeast(3)
                             onManualSettingsChanged(h, r0, rn, 6, 1.4f)
                         }
-                        TrainingMode.INTENSE -> {
+                        TrainingMode.TRAINING -> {
                             val h = (0.90 * m).toInt()
                             val r0 = (0.50 * h).toInt()
                             val rn = (0.12 * h).toInt().coerceAtLeast(3)

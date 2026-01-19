@@ -53,7 +53,7 @@ fun WelcomeScreen(
             onBack = { currentPage = 0 },
             onNext = { currentPage = 2 }
         )
-        2 -> IntenseModePage(
+        2 -> TrainingModePage(
             onBack = { currentPage = 1 },
             onNext = { currentPage = 3 }
         )
@@ -192,7 +192,7 @@ private fun RelaxationModePage(
 }
 
 @Composable
-private fun IntenseModePage(
+private fun TrainingModePage(
     onBack: () -> Unit,
     onNext: () -> Unit
 ) {
@@ -216,7 +216,7 @@ private fun IntenseModePage(
         Spacer(modifier = Modifier.weight(1f))
 
         Text(
-            text = "Intense Mode",
+            text = "Training Mode",
             style = MaterialTheme.typography.headlineMedium,
             color = MaterialTheme.colorScheme.tertiary
         )
@@ -230,7 +230,7 @@ private fun IntenseModePage(
             )
         ) {
             Text(
-                text = "Intense CO\u2082 Training mode is designed for performance and tolerance: breath holds are closer to your maximum, recovery times shorten quickly, and discomfort appears earlier.\n\nThis mode builds resilience and CO\u2082 tolerance but is physically and mentally demanding, and should be used sparingly.",
+                text = "Training mode is designed for performance and CO\u2082 tolerance: breath holds are closer to your maximum, recovery times shorten quickly, and discomfort appears earlier.\n\nThis mode builds resilience and CO\u2082 tolerance but is physically and mentally demanding, and should be used sparingly.",
                 style = MaterialTheme.typography.bodyLarge,
                 textAlign = TextAlign.Start,
                 modifier = Modifier.padding(24.dp)
@@ -311,13 +311,13 @@ private fun ModeSelectionPage(
         Spacer(modifier = Modifier.height(16.dp))
 
         OutlinedButton(
-            onClick = { onModeSelected(TrainingMode.INTENSE) },
+            onClick = { onModeSelected(TrainingMode.TRAINING) },
             modifier = Modifier
                 .fillMaxWidth()
                 .height(64.dp)
         ) {
             Text(
-                text = "Intense CO\u2082 Training",
+                text = "Training",
                 style = MaterialTheme.typography.titleMedium
             )
         }

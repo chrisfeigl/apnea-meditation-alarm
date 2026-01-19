@@ -2,7 +2,7 @@ package com.apneaalarm.data
 
 enum class TrainingMode {
     RELAXATION,  // Calm, meditation-focused
-    INTENSE      // Performance, CO₂ tolerance training
+    TRAINING     // Performance, CO₂ tolerance training
 }
 
 enum class IntensityLevel(val label: String, val description: String) {
@@ -56,31 +56,31 @@ data class UserPreferences(
     private val computedHoldMultiplier: Double
         get() = when (trainingMode) {
             TrainingMode.RELAXATION -> 0.60
-            TrainingMode.INTENSE -> 0.90
+            TrainingMode.TRAINING -> 0.90
         }
 
     private val computedR0Multiplier: Double
         get() = when (trainingMode) {
             TrainingMode.RELAXATION -> 1.25
-            TrainingMode.INTENSE -> 0.50
+            TrainingMode.TRAINING -> 0.50
         }
 
     private val computedRnMultiplier: Double
         get() = when (trainingMode) {
             TrainingMode.RELAXATION -> 0.25
-            TrainingMode.INTENSE -> 0.12
+            TrainingMode.TRAINING -> 0.12
         }
 
     private val computedNumberOfIntervals: Int
         get() = when (trainingMode) {
             TrainingMode.RELAXATION -> 6
-            TrainingMode.INTENSE -> 8
+            TrainingMode.TRAINING -> 8
         }
 
     private val computedPFactor: Double
         get() = when (trainingMode) {
             TrainingMode.RELAXATION -> 1.4
-            TrainingMode.INTENSE -> 0.75
+            TrainingMode.TRAINING -> 0.75
         }
 
     // Computed H based on mode

@@ -57,7 +57,7 @@ class PreferencesRepository(private val context: Context) {
     val userPreferences: Flow<UserPreferences> = context.dataStore.data.map { preferences ->
         val modeString = preferences[PreferencesKeys.TRAINING_MODE]
         val trainingMode = when (modeString) {
-            "INTENSE" -> TrainingMode.INTENSE
+            "TRAINING", "INTENSE" -> TrainingMode.TRAINING  // Accept both for backwards compatibility
             else -> TrainingMode.RELAXATION
         }
 

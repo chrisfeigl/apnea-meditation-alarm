@@ -256,7 +256,7 @@ private fun buildIntervalSubtitle(preferences: UserPreferences): String {
     } else {
         val modeName = when (preferences.trainingMode) {
             TrainingMode.RELAXATION -> "Relaxation"
-            TrainingMode.INTENSE -> "Intense"
+            TrainingMode.TRAINING -> "Training"
         }
         "$modeName mode, M=${preferences.maxStaticBreathHoldDurationSeconds}s"
     }
