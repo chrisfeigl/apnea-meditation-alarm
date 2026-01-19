@@ -76,7 +76,25 @@ fun IntervalSettingsScreen(
             // Training Mode & Max Breath Hold Card
             TrainingModeCard(
                 preferences = preferences,
-                onTrainingModeChanged = onTrainingModeChanged,
+                onTrainingModeChanged = { mode ->
+                    onTrainingModeChanged(mode)
+                    // Auto-reset manual params to match the selected mode
+                    val m = preferences.maxStaticBreathHoldDurationSeconds
+                    when (mode) {
+                        TrainingMode.RELAXATION -> {
+                            val h = (0.60 * m).toInt()
+                            val r0 = (1.25 * h).toInt()
+                            val rn = (0.25 * h).toInt().coerceAtLeast(3)
+                            onManualSettingsChanged(h, r0, rn, 6, 1.4f)
+                        }
+                        TrainingMode.INTENSE -> {
+                            val h = (0.90 * m).toInt()
+                            val r0 = (0.50 * h).toInt()
+                            val rn = (0.12 * h).toInt().coerceAtLeast(3)
+                            onManualSettingsChanged(h, r0, rn, 8, 0.75f)
+                        }
+                    }
+                },
                 onMaxBreathHoldChanged = onMaxBreathHoldChanged
             )
 
@@ -388,43 +406,27 @@ private fun ManualSettingsCard(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            Text(
-                text = "Reset to Mode Defaults",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f)
-            )
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            OutlinedButton(
+                onClick = {
+                    val m = preferences.maxStaticBreathHoldDurationSeconds
+                    when (preferences.trainingMode) {
+                        TrainingMode.RELAXATION -> {
+                            val h = (0.60 * m).toInt()
+                            val r0 = (1.25 * h).toInt()
+                            val rn = (0.25 * h).toInt().coerceAtLeast(3)
+                            onManualSettingsChanged(h, r0, rn, 6, 1.4f)
+                        }
+                        TrainingMode.INTENSE -> {
+                            val h = (0.90 * m).toInt()
+                            val r0 = (0.50 * h).toInt()
+                            val rn = (0.12 * h).toInt().coerceAtLeast(3)
+                            onManualSettingsChanged(h, r0, rn, 8, 0.75f)
+                        }
+                    }
+                },
+                modifier = Modifier.fillMaxWidth()
             ) {
-                val m = preferences.maxStaticBreathHoldDurationSeconds
-                OutlinedButton(
-                    onClick = {
-                        // Relaxation: H = 0.60*M, R0 = 1.25*H, Rn = 0.25*H, N = 6, p = 1.4
-                        val h = (0.60 * m).toInt()
-                        val r0 = (1.25 * h).toInt()
-                        val rn = (0.25 * h).toInt().coerceAtLeast(3)
-                        onManualSettingsChanged(h, r0, rn, 6, 1.4f)
-                    },
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Text("Relaxation")
-                }
-                OutlinedButton(
-                    onClick = {
-                        // Intense: H = 0.90*M, R0 = 0.50*H, Rn = 0.12*H, N = 8, p = 0.75
-                        val h = (0.90 * m).toInt()
-                        val r0 = (0.50 * h).toInt()
-                        val rn = (0.12 * h).toInt().coerceAtLeast(3)
-                        onManualSettingsChanged(h, r0, rn, 8, 0.75f)
-                    },
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Text("Intense")
-                }
+                Text("Reset to ${preferences.trainingMode.name.lowercase().replaceFirstChar { it.uppercase() }} Defaults")
             }
         }
     }
