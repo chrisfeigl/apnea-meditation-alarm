@@ -63,6 +63,7 @@ fun AlarmEditScreen(
         ))
     }
     var showTimePicker by remember { mutableStateOf(false) }
+    var showAudioFilesDialog by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -168,7 +169,8 @@ fun AlarmEditScreen(
             // Audio Settings
             AlarmAudioSettingsCard(
                 settings = currentAlarm.sessionSettings,
-                onSettingsChanged = { currentAlarm = currentAlarm.copy(sessionSettings = it) }
+                onSettingsChanged = { currentAlarm = currentAlarm.copy(sessionSettings = it) },
+                onAudioFilesClick = { showAudioFilesDialog = true }
             )
 
             Spacer(modifier = Modifier.height(24.dp))
@@ -200,6 +202,15 @@ fun AlarmEditScreen(
                 showTimePicker = false
             },
             onDismiss = { showTimePicker = false }
+        )
+    }
+
+    // Audio Files Dialog
+    if (showAudioFilesDialog) {
+        AudioFilesDialog(
+            settings = currentAlarm.sessionSettings,
+            onSettingsChanged = { currentAlarm = currentAlarm.copy(sessionSettings = it) },
+            onDismiss = { showAudioFilesDialog = false }
         )
     }
 }
@@ -738,7 +749,8 @@ private fun AlarmSessionPreview(
 @Composable
 private fun AlarmAudioSettingsCard(
     settings: SessionSettings,
-    onSettingsChanged: (SessionSettings) -> Unit
+    onSettingsChanged: (SessionSettings) -> Unit,
+    onAudioFilesClick: () -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
 
@@ -784,6 +796,16 @@ private fun AlarmAudioSettingsCard(
                         checked = settings.fadeInIntroBowl,
                         onCheckedChange = { onSettingsChanged(settings.copy(fadeInIntroBowl = it)) }
                     )
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Audio Files button
+                OutlinedButton(
+                    onClick = onAudioFilesClick,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Audio Files")
                 }
             }
         }

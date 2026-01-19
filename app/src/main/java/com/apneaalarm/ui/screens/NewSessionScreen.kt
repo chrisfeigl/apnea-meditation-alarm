@@ -53,6 +53,7 @@ fun NewSessionScreen(
 ) {
     var settings by remember { mutableStateOf(initialSettings) }
     var showSaveDialog by remember { mutableStateOf(false) }
+    var showAudioFilesDialog by remember { mutableStateOf(false) }
     var sessionName by remember { mutableStateOf("") }
 
     Scaffold(
@@ -126,7 +127,8 @@ fun NewSessionScreen(
             // Audio Settings Card (expandable)
             AudioSettingsCardForSession(
                 settings = settings,
-                onSettingsChanged = { settings = it }
+                onSettingsChanged = { settings = it },
+                onAudioFilesClick = { showAudioFilesDialog = true }
             )
 
             Spacer(modifier = Modifier.height(24.dp))
@@ -181,6 +183,15 @@ fun NewSessionScreen(
                     Text("Cancel")
                 }
             }
+        )
+    }
+
+    // Audio Files Dialog
+    if (showAudioFilesDialog) {
+        AudioFilesDialog(
+            settings = settings,
+            onSettingsChanged = { settings = it },
+            onDismiss = { showAudioFilesDialog = false }
         )
     }
 }
@@ -604,7 +615,8 @@ private fun SessionPreviewCardForSettings(settings: SessionSettings, globalM: In
 @Composable
 private fun AudioSettingsCardForSession(
     settings: SessionSettings,
-    onSettingsChanged: (SessionSettings) -> Unit
+    onSettingsChanged: (SessionSettings) -> Unit,
+    onAudioFilesClick: () -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
 
@@ -685,6 +697,16 @@ private fun AudioSettingsCardForSession(
                             onSettingsChanged(settings.copy(fadeInIntroBowl = it))
                         }
                     )
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Audio Files button
+                OutlinedButton(
+                    onClick = onAudioFilesClick,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Audio Files")
                 }
             }
         }
