@@ -103,7 +103,27 @@ fun IntervalSettingsScreen(
             // Manual Settings Toggle
             ManualSettingsToggle(
                 useManual = preferences.useManualIntervalSettings,
-                onUseManualChanged = onUseManualChanged
+                onUseManualChanged = { enabled ->
+                    onUseManualChanged(enabled)
+                    // When enabling manual mode, initialize params to current training mode
+                    if (enabled) {
+                        val m = preferences.maxStaticBreathHoldDurationSeconds
+                        when (preferences.trainingMode) {
+                            TrainingMode.RELAXATION -> {
+                                val h = (0.60 * m).toInt()
+                                val r0 = (1.25 * h).toInt()
+                                val rn = (0.25 * h).toInt().coerceAtLeast(3)
+                                onManualSettingsChanged(h, r0, rn, 6, 1.4f)
+                            }
+                            TrainingMode.INTENSE -> {
+                                val h = (0.90 * m).toInt()
+                                val r0 = (0.50 * h).toInt()
+                                val rn = (0.12 * h).toInt().coerceAtLeast(3)
+                                onManualSettingsChanged(h, r0, rn, 8, 0.75f)
+                            }
+                        }
+                    }
+                }
             )
 
             Spacer(modifier = Modifier.height(16.dp))
