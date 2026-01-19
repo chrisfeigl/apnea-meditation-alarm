@@ -15,7 +15,6 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -24,8 +23,10 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.navigation.compose.rememberNavController
 import com.apneaalarm.alarm.AlarmScheduler
-import com.apneaalarm.audio.AudioPlayer
+import com.apneaalarm.data.Alarm
 import com.apneaalarm.data.PreferencesRepository
+import com.apneaalarm.data.SavedSession
+import com.apneaalarm.data.SessionSettings
 import com.apneaalarm.data.TrainingMode
 import com.apneaalarm.data.UserPreferences
 import com.apneaalarm.session.SessionProgress
@@ -41,11 +42,16 @@ class MainActivity : ComponentActivity() {
 
     private lateinit var preferencesRepository: PreferencesRepository
     private lateinit var alarmScheduler: AlarmScheduler
-    private var previewAudioPlayer: AudioPlayer? = null
 
     private val preferencesFlow = MutableStateFlow(UserPreferences())
+    private val alarmsFlow = MutableStateFlow<List<Alarm>>(emptyList())
+    private val savedSessionsFlow = MutableStateFlow<List<SavedSession>>(emptyList())
     private val sessionProgressFlow = MutableStateFlow(SessionProgress())
-    private var isPreviewPlaying by mutableStateOf(false)
+    private val snoozeEnabledFlow = MutableStateFlow(false)
+    private val snoozeDurationFlow = MutableStateFlow(5)
+
+    // Cache of alarms for quick access in composable
+    private var alarmsCache: List<Alarm> = emptyList()
 
     private var sessionService: SessionService? = null
     private var serviceBound by mutableStateOf(false)
@@ -55,6 +61,12 @@ class MainActivity : ComponentActivity() {
             val binder = service as SessionService.LocalBinder
             sessionService = binder.getService()
             serviceBound = true
+
+            // Update snooze state from service
+            sessionService?.let { svc ->
+                snoozeEnabledFlow.value = svc.snoozeEnabled
+                snoozeDurationFlow.value = svc.snoozeDuration
+            }
 
             lifecycleScope.launch {
                 sessionService?.sessionProgress?.collect { progress ->
@@ -81,9 +93,27 @@ class MainActivity : ComponentActivity() {
 
         requestNotificationPermission()
 
+        // Collect user preferences
         lifecycleScope.launch {
             preferencesRepository.userPreferences.collect { prefs ->
                 preferencesFlow.value = prefs
+            }
+        }
+
+        // Collect alarms
+        lifecycleScope.launch {
+            preferencesRepository.alarmsFlow.collect { alarms ->
+                alarmsFlow.value = alarms
+                alarmsCache = alarms
+                // Reschedule all alarms when list changes
+                alarmScheduler.scheduleAllAlarms(alarms)
+            }
+        }
+
+        // Collect saved sessions
+        lifecycleScope.launch {
+            preferencesRepository.savedSessionsFlow.collect { sessions ->
+                savedSessionsFlow.value = sessions
             }
         }
 
@@ -106,9 +136,13 @@ class MainActivity : ComponentActivity() {
                     ApneaNavGraph(
                         navController = navController,
                         preferencesFlow = preferencesFlow,
+                        alarmsFlow = alarmsFlow,
+                        savedSessionsFlow = savedSessionsFlow,
                         sessionProgressFlow = sessionProgressFlow,
-                        onStartSession = { skipIntro ->
-                            startSession(skipIntro)
+                        snoozeEnabledFlow = snoozeEnabledFlow,
+                        snoozeDurationFlow = snoozeDurationFlow,
+                        onStartSessionWithSettings = { settings ->
+                            startSessionWithSettings(settings)
                         },
                         onStopSession = {
                             stopSession()
@@ -119,60 +153,29 @@ class MainActivity : ComponentActivity() {
                         onSnooze = {
                             snoozeAlarm()
                         },
-                        onAlarmEnabledChanged = { enabled ->
-                            handleAlarmEnabledChanged(enabled)
+                        onSaveAlarm = { alarm ->
+                            handleSaveAlarm(alarm)
                         },
-                        onAlarmTimeChanged = { hour, minute ->
-                            handleAlarmTimeChanged(hour, minute)
+                        onDeleteAlarm = { alarmId ->
+                            handleDeleteAlarm(alarmId)
                         },
-                        onAlarmDaysChanged = { days ->
-                            handleAlarmDaysChanged(days)
+                        onAlarmEnabledChanged = { alarmId, enabled ->
+                            handleAlarmEnabledChanged(alarmId, enabled)
                         },
-                        onBreathHoldChanged = { seconds ->
-                            handleBreathHoldChanged(seconds)
+                        onSaveSession = { name, settings ->
+                            handleSaveSession(name, settings)
                         },
-                        onIntroBowlVolumeChanged = { volume ->
-                            handleIntroBowlVolumeChanged(volume)
+                        onDeleteSavedSession = { sessionId ->
+                            handleDeleteSavedSession(sessionId)
                         },
-                        onBreathChimeVolumeChanged = { volume ->
-                            handleBreathChimeVolumeChanged(volume)
+                        onMaxBreathHoldChanged = { seconds ->
+                            handleMaxBreathHoldChanged(seconds)
                         },
-                        onHoldChimeVolumeChanged = { volume ->
-                            handleHoldChimeVolumeChanged(volume)
-                        },
-                        onTrainingModeChanged = { mode ->
-                            handleTrainingModeChanged(mode)
-                        },
-                        onFadeInIntroBowlChanged = { fadeIn ->
-                            handleFadeInIntroBowlChanged(fadeIn)
-                        },
-                        onIntroBowlUriChanged = { uri ->
-                            handleIntroBowlUriChanged(uri)
-                        },
-                        onBreathChimeUriChanged = { uri ->
-                            handleBreathChimeUriChanged(uri)
-                        },
-                        onHoldChimeUriChanged = { uri ->
-                            handleHoldChimeUriChanged(uri)
-                        },
-                        onSnoozeDurationChanged = { minutes ->
-                            handleSnoozeDurationChanged(minutes)
-                        },
-                        onPreviewSound = { uri, soundType ->
-                            handlePreviewSound(uri, soundType)
-                        },
-                        onStopPreview = {
-                            handleStopPreview()
-                        },
-                        isPreviewPlaying = isPreviewPlaying,
                         onCompleteSetup = { mode, breathHoldSeconds ->
                             handleCompleteSetup(mode, breathHoldSeconds)
                         },
-                        onUseManualChanged = { useManual ->
-                            handleUseManualChanged(useManual)
-                        },
-                        onManualSettingsChanged = { h, r0, rn, n, p ->
-                            handleManualSettingsChanged(h, r0, rn, n, p)
+                        getAlarmById = { alarmId ->
+                            alarmsCache.find { it.id == alarmId }
                         }
                     )
                 }
@@ -195,12 +198,6 @@ class MainActivity : ComponentActivity() {
         setIntent(intent)
     }
 
-    override fun onDestroy() {
-        super.onDestroy()
-        previewAudioPlayer?.release()
-        previewAudioPlayer = null
-    }
-
     private fun bindToSessionService() {
         Intent(this, SessionService::class.java).also { intent ->
             bindService(intent, serviceConnection, Context.BIND_AUTO_CREATE)
@@ -214,78 +211,73 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun startSession(skipIntro: Boolean) {
-        val intent = Intent(this, SessionService::class.java).apply {
-            action = SessionService.ACTION_START_SESSION
-            putExtra(SessionService.EXTRA_SKIP_INTRO, skipIntro)
-        }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            startForegroundService(intent)
-        } else {
-            startService(intent)
-        }
-    }
-
-    private fun handleAlarmEnabledChanged(enabled: Boolean) {
+    private fun startSessionWithSettings(settings: SessionSettings) {
         lifecycleScope.launch {
-            preferencesRepository.updateAlarmEnabled(enabled)
+            // Save as last session
+            preferencesRepository.updateLastSession(settings)
+
             val prefs = preferencesRepository.userPreferences.first()
-            if (enabled) {
-                alarmScheduler.scheduleAlarm(prefs.alarmHour, prefs.alarmMinute)
+            val globalM = prefs.maxStaticBreathHoldDurationSeconds
+
+            val intent = Intent(this@MainActivity, SessionService::class.java).apply {
+                action = SessionService.ACTION_START_SESSION
+                putExtra(SessionService.EXTRA_SKIP_INTRO, false)
+                putExtra(SessionService.EXTRA_SESSION_SETTINGS_JSON, preferencesRepository.sessionSettingsToJson(settings))
+                putExtra(SessionService.EXTRA_GLOBAL_M, globalM)
+            }
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                startForegroundService(intent)
             } else {
-                alarmScheduler.cancelAlarm()
+                startService(intent)
             }
+
+            // Update snooze state for manual sessions (no snooze)
+            snoozeEnabledFlow.value = false
         }
     }
 
-    private fun handleAlarmTimeChanged(hour: Int, minute: Int) {
+    private fun handleSaveAlarm(alarm: Alarm) {
         lifecycleScope.launch {
-            preferencesRepository.updateAlarmTime(hour, minute)
-            val prefs = preferencesRepository.userPreferences.first()
-            if (prefs.alarmEnabled) {
-                alarmScheduler.scheduleAlarm(hour, minute)
-            }
+            preferencesRepository.saveAlarm(alarm)
+            // Scheduling happens automatically via the alarmsFlow collector
         }
     }
 
-    private fun handleAlarmDaysChanged(days: Set<Int>) {
+    private fun handleDeleteAlarm(alarmId: Long) {
         lifecycleScope.launch {
-            preferencesRepository.updateAlarmDays(days)
-            // Reschedule alarm if enabled
-            val prefs = preferencesRepository.userPreferences.first()
-            if (prefs.alarmEnabled) {
-                alarmScheduler.scheduleAlarm(prefs.alarmHour, prefs.alarmMinute)
-            }
+            alarmScheduler.cancelAlarm(alarmId)
+            preferencesRepository.deleteAlarm(alarmId)
         }
     }
 
-    private fun handleBreathHoldChanged(seconds: Int) {
+    private fun handleAlarmEnabledChanged(alarmId: Long, enabled: Boolean) {
+        lifecycleScope.launch {
+            preferencesRepository.updateAlarmEnabled(alarmId, enabled)
+            // Alarm will be rescheduled via the alarmsFlow collector
+        }
+    }
+
+    private fun handleSaveSession(name: String, settings: SessionSettings) {
+        lifecycleScope.launch {
+            val savedSession = SavedSession(
+                id = System.currentTimeMillis(),
+                name = name,
+                sessionSettings = settings
+            )
+            preferencesRepository.saveSession(savedSession)
+        }
+    }
+
+    private fun handleDeleteSavedSession(sessionId: Long) {
+        lifecycleScope.launch {
+            preferencesRepository.deleteSavedSession(sessionId)
+        }
+    }
+
+    private fun handleMaxBreathHoldChanged(seconds: Int) {
         lifecycleScope.launch {
             preferencesRepository.updateMaxStaticBreathHoldDuration(seconds)
-        }
-    }
-
-    private fun handleIntroBowlVolumeChanged(volume: Int) {
-        lifecycleScope.launch {
-            preferencesRepository.updateVolumeMultipliers(introBowl = volume)
-        }
-    }
-
-    private fun handleBreathChimeVolumeChanged(volume: Int) {
-        lifecycleScope.launch {
-            preferencesRepository.updateVolumeMultipliers(breathChime = volume)
-        }
-    }
-
-    private fun handleHoldChimeVolumeChanged(volume: Int) {
-        lifecycleScope.launch {
-            preferencesRepository.updateVolumeMultipliers(holdChime = volume)
-        }
-    }
-
-    private fun handleTrainingModeChanged(mode: TrainingMode) {
-        lifecycleScope.launch {
-            preferencesRepository.updateTrainingMode(mode)
         }
     }
 
@@ -295,165 +287,51 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun handleUseManualChanged(useManual: Boolean) {
-        lifecycleScope.launch {
-            preferencesRepository.updateUseManualIntervalSettings(useManual)
-        }
-    }
-
-    private fun handleManualSettingsChanged(h: Int?, r0: Int?, rn: Int?, n: Int?, p: Float?) {
-        lifecycleScope.launch {
-            preferencesRepository.updateManualIntervalSettings(
-                breathHoldDuration = h,
-                r0Seconds = r0,
-                rnSeconds = rn,
-                numberOfIntervals = n,
-                pFactor = p
-            )
-        }
-    }
-
-    private fun handleSnoozeDurationChanged(minutes: Int) {
-        lifecycleScope.launch {
-            preferencesRepository.updateSnoozeDuration(minutes)
-        }
-    }
-
-    private fun handleFadeInIntroBowlChanged(fadeIn: Boolean) {
-        lifecycleScope.launch {
-            preferencesRepository.updateFadeInIntroBowl(fadeIn)
-        }
-    }
-
-    private fun handleIntroBowlUriChanged(uri: String?) {
-        lifecycleScope.launch {
-            if (uri != null) {
-                // Take persistent permission for the URI
-                val parsedUri = android.net.Uri.parse(uri)
-                val permissionTaken = takePersistablePermission(parsedUri)
-                if (permissionTaken) {
-                    preferencesRepository.updateCustomSoundUri(introBowlUri = uri)
-                    android.util.Log.i("MainActivity", "Saved custom intro bowl URI: $uri")
-                } else {
-                    android.util.Log.e("MainActivity", "Failed to get permission for URI: $uri")
-                }
-            } else {
-                preferencesRepository.updateCustomSoundUri(clearIntroBowl = true)
-            }
-        }
-    }
-
-    private fun handleBreathChimeUriChanged(uri: String?) {
-        lifecycleScope.launch {
-            if (uri != null) {
-                val parsedUri = android.net.Uri.parse(uri)
-                val permissionTaken = takePersistablePermission(parsedUri)
-                if (permissionTaken) {
-                    preferencesRepository.updateCustomSoundUri(breathChimeUri = uri)
-                    android.util.Log.i("MainActivity", "Saved custom breath chime URI: $uri")
-                } else {
-                    android.util.Log.e("MainActivity", "Failed to get permission for URI: $uri")
-                }
-            } else {
-                preferencesRepository.updateCustomSoundUri(clearBreathChime = true)
-            }
-        }
-    }
-
-    private fun handleHoldChimeUriChanged(uri: String?) {
-        lifecycleScope.launch {
-            if (uri != null) {
-                val parsedUri = android.net.Uri.parse(uri)
-                val permissionTaken = takePersistablePermission(parsedUri)
-                if (permissionTaken) {
-                    preferencesRepository.updateCustomSoundUri(holdChimeUri = uri)
-                    android.util.Log.i("MainActivity", "Saved custom hold chime URI: $uri")
-                } else {
-                    android.util.Log.e("MainActivity", "Failed to get permission for URI: $uri")
-                }
-            } else {
-                preferencesRepository.updateCustomSoundUri(clearHoldChime = true)
-            }
-        }
-    }
-
-    private fun handlePreviewSound(uri: String?, soundType: String) {
-        // Create or reuse the preview audio player
-        if (previewAudioPlayer == null) {
-            previewAudioPlayer = AudioPlayer(applicationContext)
-        }
-
-        val player = previewAudioPlayer ?: return
-
-        lifecycleScope.launch {
-            val prefs = preferencesRepository.userPreferences.first()
-
-            isPreviewPlaying = true
-
-            val onComplete: () -> Unit = {
-                isPreviewPlaying = false
-            }
-
-            when (soundType) {
-                "intro_bowl" -> player.playIntroBowlPreview(
-                    prefs.introBowlVolumeMultiplier,
-                    uri,
-                    onComplete
-                )
-                "breath_chime" -> player.playBreathChimePreview(
-                    prefs.breathChimeVolumeMultiplier,
-                    uri,
-                    onComplete
-                )
-                "hold_chime" -> player.playHoldChimePreview(
-                    prefs.holdChimeVolumeMultiplier,
-                    uri,
-                    onComplete
-                )
-            }
-        }
-    }
-
-    private fun handleStopPreview() {
-        previewAudioPlayer?.stopPreview()
-        isPreviewPlaying = false
-    }
-
-    private fun takePersistablePermission(uri: android.net.Uri): Boolean {
-        return try {
-            contentResolver.takePersistableUriPermission(
-                uri,
-                Intent.FLAG_GRANT_READ_URI_PERMISSION
-            )
-            android.util.Log.i("MainActivity", "Successfully took persistable permission for: $uri")
-            true
-        } catch (e: SecurityException) {
-            android.util.Log.e("MainActivity", "SecurityException taking permission: ${e.message}")
-            // Still save the URI - it might work with temporary permission
-            true
-        } catch (e: Exception) {
-            android.util.Log.e("MainActivity", "Exception taking permission: ${e.message}")
-            true
-        }
-    }
-
     private fun stopSession() {
         sessionService?.stopSession()
     }
 
     private fun skipIntroAndStartExercises() {
         // Stop current session and restart with skip intro
+        // Get current settings from service if available
         sessionService?.stopSession()
-        startSession(skipIntro = true)
+
+        lifecycleScope.launch {
+            val prefs = preferencesRepository.userPreferences.first()
+            val settings = prefs.lastSessionSettings ?: SessionSettings()
+            val globalM = prefs.maxStaticBreathHoldDurationSeconds
+
+            val intent = Intent(this@MainActivity, SessionService::class.java).apply {
+                action = SessionService.ACTION_START_SESSION
+                putExtra(SessionService.EXTRA_SKIP_INTRO, true)
+                putExtra(SessionService.EXTRA_SESSION_SETTINGS_JSON, preferencesRepository.sessionSettingsToJson(settings))
+                putExtra(SessionService.EXTRA_GLOBAL_M, globalM)
+            }
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                startForegroundService(intent)
+            } else {
+                startService(intent)
+            }
+        }
     }
 
     private fun snoozeAlarm() {
         lifecycleScope.launch {
-            val prefs = preferencesRepository.userPreferences.first()
+            val service = sessionService ?: return@launch
+
             // Stop the current session
-            sessionService?.stopSession()
-            // Schedule a new alarm for snooze duration from now
-            alarmScheduler.scheduleSnooze(prefs.snoozeDurationMinutes)
+            service.stopSession()
+
+            // Schedule snooze using the alarm's snooze settings
+            if (service.snoozeEnabled) {
+                alarmScheduler.scheduleSnooze(
+                    minutes = service.snoozeDuration,
+                    alarmId = service.alarmId,
+                    snoozeDurationMinutes = service.snoozeDuration,
+                    snoozeEnabled = service.snoozeEnabled
+                )
+            }
         }
     }
 

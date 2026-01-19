@@ -4,15 +4,20 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.navigation.NavHostController
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.navArgument
+import com.apneaalarm.data.Alarm
+import com.apneaalarm.data.SavedSession
+import com.apneaalarm.data.SessionSettings
 import com.apneaalarm.data.TrainingMode
 import com.apneaalarm.data.UserPreferences
 import com.apneaalarm.session.SessionProgress
-import com.apneaalarm.ui.screens.AudioFilesScreen
-import com.apneaalarm.ui.screens.AudioSettingsScreen
+import com.apneaalarm.ui.screens.AlarmEditScreen
 import com.apneaalarm.ui.screens.HomeScreen
-import com.apneaalarm.ui.screens.IntervalSettingsScreen
+import com.apneaalarm.ui.screens.NewSessionScreen
+import com.apneaalarm.ui.screens.SavedSessionsScreen
 import com.apneaalarm.ui.screens.SessionScreen
 import com.apneaalarm.ui.screens.SettingsScreen
 import com.apneaalarm.ui.screens.WelcomeScreen
@@ -23,42 +28,49 @@ sealed class Screen(val route: String) {
     object Home : Screen("home")
     object Session : Screen("session")
     object Settings : Screen("settings")
-    object IntervalSettings : Screen("interval_settings")
-    object AudioSettings : Screen("audio_settings")
-    object AudioFiles : Screen("audio_files")
+    object NewSession : Screen("new_session")
+    object SavedSessions : Screen("saved_sessions")
+    object AlarmEdit : Screen("alarm_edit/{alarmId}") {
+        fun createRoute(alarmId: Long?) = "alarm_edit/${alarmId ?: -1}"
+    }
 }
 
 @Composable
 fun ApneaNavGraph(
     navController: NavHostController,
     preferencesFlow: StateFlow<UserPreferences>,
+    alarmsFlow: StateFlow<List<Alarm>>,
+    savedSessionsFlow: StateFlow<List<SavedSession>>,
     sessionProgressFlow: StateFlow<SessionProgress>,
-    onStartSession: (skipIntro: Boolean) -> Unit,
+    snoozeEnabledFlow: StateFlow<Boolean>,
+    snoozeDurationFlow: StateFlow<Int>,
+    // Session control
+    onStartSessionWithSettings: (SessionSettings) -> Unit,
     onStopSession: () -> Unit,
     onSkipIntro: () -> Unit,
     onSnooze: () -> Unit,
-    onAlarmEnabledChanged: (Boolean) -> Unit,
-    onAlarmTimeChanged: (Int, Int) -> Unit,
-    onAlarmDaysChanged: (Set<Int>) -> Unit,
-    onBreathHoldChanged: (Int) -> Unit,
-    onIntroBowlVolumeChanged: (Int) -> Unit,
-    onBreathChimeVolumeChanged: (Int) -> Unit,
-    onHoldChimeVolumeChanged: (Int) -> Unit,
-    onTrainingModeChanged: (TrainingMode) -> Unit,
-    onFadeInIntroBowlChanged: (Boolean) -> Unit,
-    onIntroBowlUriChanged: (String?) -> Unit,
-    onBreathChimeUriChanged: (String?) -> Unit,
-    onHoldChimeUriChanged: (String?) -> Unit,
-    onSnoozeDurationChanged: (Int) -> Unit,
-    onPreviewSound: (uri: String?, soundType: String) -> Unit,
-    onStopPreview: () -> Unit,
-    isPreviewPlaying: Boolean,
+    // Alarm management
+    onSaveAlarm: (Alarm) -> Unit,
+    onDeleteAlarm: (Long) -> Unit,
+    onAlarmEnabledChanged: (Long, Boolean) -> Unit,
+    // Session management
+    onSaveSession: (String, SessionSettings) -> Unit,
+    onDeleteSavedSession: (Long) -> Unit,
+    // Global settings
+    onMaxBreathHoldChanged: (Int) -> Unit,
+    // Setup
     onCompleteSetup: (TrainingMode, Int) -> Unit,
-    onUseManualChanged: (Boolean) -> Unit,
-    onManualSettingsChanged: (h: Int?, r0: Int?, rn: Int?, n: Int?, p: Float?) -> Unit
+    // Get alarm by ID (for edit screen)
+    getAlarmById: (Long) -> Alarm?
 ) {
     val preferences by preferencesFlow.collectAsState()
+    val alarms by alarmsFlow.collectAsState()
+    val savedSessions by savedSessionsFlow.collectAsState()
     val sessionProgress by sessionProgressFlow.collectAsState()
+    val snoozeEnabled by snoozeEnabledFlow.collectAsState()
+    val snoozeDuration by snoozeDurationFlow.collectAsState()
+
+    val globalM = preferences.maxStaticBreathHoldDurationSeconds
 
     val startDestination = if (preferences.isFirstTimeSetupComplete) {
         Screen.Home.route
@@ -84,6 +96,7 @@ fun ApneaNavGraph(
         composable(Screen.Home.route) {
             HomeScreen(
                 preferences = preferences,
+                alarms = alarms,
                 isSessionActive = sessionProgress.isActive,
                 onNavigateToSettings = {
                     navController.navigate(Screen.Settings.route)
@@ -91,9 +104,20 @@ fun ApneaNavGraph(
                 onNavigateToSession = {
                     navController.navigate(Screen.Session.route)
                 },
-                onStartSession = { skipIntro ->
-                    onStartSession(skipIntro)
-                    navController.navigate(Screen.Session.route)
+                onNavigateToNewSession = {
+                    navController.navigate(Screen.NewSession.route)
+                },
+                onNavigateToSavedSessions = {
+                    navController.navigate(Screen.SavedSessions.route)
+                },
+                onNavigateToAlarmEdit = { alarmId ->
+                    navController.navigate(Screen.AlarmEdit.createRoute(alarmId))
+                },
+                onRepeatLastSession = {
+                    preferences.lastSessionSettings?.let { settings ->
+                        onStartSessionWithSettings(settings)
+                        navController.navigate(Screen.Session.route)
+                    }
                 }
             )
         }
@@ -119,62 +143,85 @@ fun ApneaNavGraph(
                         popUpTo(Screen.Session.route) { inclusive = true }
                     }
                 },
-                snoozeDurationMinutes = preferences.snoozeDurationMinutes
+                snoozeDurationMinutes = snoozeDuration,
+                snoozeEnabled = snoozeEnabled
             )
         }
 
         composable(Screen.Settings.route) {
             SettingsScreen(
                 preferences = preferences,
+                alarms = alarms,
                 onNavigateBack = { navController.popBackStack() },
-                onNavigateToIntervalSettings = {
-                    navController.navigate(Screen.IntervalSettings.route)
-                },
-                onNavigateToAudioSettings = {
-                    navController.navigate(Screen.AudioSettings.route)
+                onNavigateToAlarmEdit = { alarmId ->
+                    navController.navigate(Screen.AlarmEdit.createRoute(alarmId))
                 },
                 onAlarmEnabledChanged = onAlarmEnabledChanged,
-                onAlarmTimeChanged = onAlarmTimeChanged,
-                onAlarmDaysChanged = onAlarmDaysChanged,
-                onSnoozeDurationChanged = onSnoozeDurationChanged
+                onMaxBreathHoldChanged = onMaxBreathHoldChanged
             )
         }
 
-        composable(Screen.IntervalSettings.route) {
-            IntervalSettingsScreen(
-                preferences = preferences,
-                onNavigateBack = { navController.popBackStack() },
-                onTrainingModeChanged = onTrainingModeChanged,
-                onMaxBreathHoldChanged = onBreathHoldChanged,
-                onUseManualChanged = onUseManualChanged,
-                onManualSettingsChanged = onManualSettingsChanged
-            )
-        }
+        composable(Screen.NewSession.route) {
+            // Get initial settings from last session or defaults
+            val initialSettings = preferences.lastSessionSettings ?: SessionSettings()
 
-        composable(Screen.AudioSettings.route) {
-            AudioSettingsScreen(
-                preferences = preferences,
+            NewSessionScreen(
+                initialSettings = initialSettings,
+                globalM = globalM,
                 onNavigateBack = { navController.popBackStack() },
-                onNavigateToAudioFiles = {
-                    navController.navigate(Screen.AudioFiles.route)
+                onStartSession = { settings ->
+                    onStartSessionWithSettings(settings)
+                    navController.navigate(Screen.Session.route) {
+                        popUpTo(Screen.NewSession.route) { inclusive = true }
+                    }
                 },
-                onIntroBowlVolumeChanged = onIntroBowlVolumeChanged,
-                onBreathChimeVolumeChanged = onBreathChimeVolumeChanged,
-                onHoldChimeVolumeChanged = onHoldChimeVolumeChanged,
-                onFadeInIntroBowlChanged = onFadeInIntroBowlChanged
+                onSaveSession = { name, settings ->
+                    onSaveSession(name, settings)
+                }
             )
         }
 
-        composable(Screen.AudioFiles.route) {
-            AudioFilesScreen(
-                preferences = preferences,
+        composable(Screen.SavedSessions.route) {
+            SavedSessionsScreen(
+                savedSessions = savedSessions,
+                globalM = globalM,
                 onNavigateBack = { navController.popBackStack() },
-                onIntroBowlUriChanged = onIntroBowlUriChanged,
-                onBreathChimeUriChanged = onBreathChimeUriChanged,
-                onHoldChimeUriChanged = onHoldChimeUriChanged,
-                onPreviewSound = onPreviewSound,
-                onStopPreview = onStopPreview,
-                isPreviewPlaying = isPreviewPlaying
+                onSessionSelected = { savedSession ->
+                    // Navigate to NewSession with the saved session's settings
+                    navController.popBackStack()
+                    navController.navigate(Screen.NewSession.route)
+                    // The settings will be loaded via the route - we need to pass them somehow
+                    // For now, we'll start the session directly
+                    onStartSessionWithSettings(savedSession.sessionSettings)
+                    navController.navigate(Screen.Session.route) {
+                        popUpTo(Screen.SavedSessions.route) { inclusive = true }
+                    }
+                },
+                onDeleteSession = onDeleteSavedSession
+            )
+        }
+
+        composable(
+            route = Screen.AlarmEdit.route,
+            arguments = listOf(navArgument("alarmId") { type = NavType.LongType })
+        ) { backStackEntry ->
+            val alarmId = backStackEntry.arguments?.getLong("alarmId") ?: -1L
+            val isNewAlarm = alarmId == -1L
+            val alarm = if (isNewAlarm) null else getAlarmById(alarmId)
+
+            AlarmEditScreen(
+                alarm = alarm,
+                globalM = globalM,
+                isNewAlarm = isNewAlarm,
+                onNavigateBack = { navController.popBackStack() },
+                onSaveAlarm = { savedAlarm ->
+                    onSaveAlarm(savedAlarm)
+                    navController.popBackStack()
+                },
+                onDeleteAlarm = { id ->
+                    onDeleteAlarm(id)
+                    navController.popBackStack()
+                }
             )
         }
     }

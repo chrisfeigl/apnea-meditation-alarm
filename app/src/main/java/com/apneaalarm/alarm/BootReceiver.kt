@@ -13,19 +13,17 @@ class BootReceiver : BroadcastReceiver() {
 
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action == Intent.ACTION_BOOT_COMPLETED) {
-            rescheduleAlarm(context)
+            rescheduleAllAlarms(context)
         }
     }
 
-    private fun rescheduleAlarm(context: Context) {
+    private fun rescheduleAllAlarms(context: Context) {
         val repository = PreferencesRepository(context)
         val alarmScheduler = AlarmScheduler(context)
 
         CoroutineScope(Dispatchers.IO).launch {
-            val prefs = repository.userPreferences.first()
-            if (prefs.alarmEnabled) {
-                alarmScheduler.scheduleAlarm(prefs.alarmHour, prefs.alarmMinute)
-            }
+            val alarms = repository.alarmsFlow.first()
+            alarmScheduler.scheduleAllAlarms(alarms)
         }
     }
 }

@@ -12,47 +12,33 @@ enum class IntensityLevel(val label: String, val description: String) {
     ADVANCED("Advanced", "Infrequent use")
 }
 
-data class UserPreferences(
-    // Alarm settings
-    val alarmHour: Int = 7,
-    val alarmMinute: Int = 0,
-    val alarmEnabled: Boolean = false,
-    val alarmDays: Set<Int> = setOf(1, 2, 3, 4, 5, 6, 7), // Days of week (1=Mon, 7=Sun), all days by default
-    val isFirstTimeSetupComplete: Boolean = false,
-
-    // Training mode
+/**
+ * Shared session settings used by both Alarm and SavedSession.
+ * Note: Global M (maxStaticBreathHoldDurationSeconds) is stored in UserPreferences
+ * and must be passed to computed property methods.
+ */
+data class SessionSettings(
+    // Intention
     val trainingMode: TrainingMode = TrainingMode.RELAXATION,
-
-    // Breath hold settings - M (max static breath hold recorded by user)
-    val maxStaticBreathHoldDurationSeconds: Int = 60,
-
-    // Manual interval settings (when useManualIntervalSettings is true)
+    // Manual intervals
     val useManualIntervalSettings: Boolean = false,
     val manualBreathHoldDurationSeconds: Int = 36,  // H
     val manualR0Seconds: Int = 45,                   // R0 (max breathing interval)
     val manualRnSeconds: Int = 9,                    // Rn (min breathing interval)
     val manualNumberOfIntervals: Int = 6,            // N
     val manualPFactor: Float = 1.4f,                 // p
-
-    // Volume multipliers (1-10 scale, default 10 = 100% of system alarm volume)
+    // Audio
     val introBowlVolumeMultiplier: Int = 10,
     val breathChimeVolumeMultiplier: Int = 10,
     val holdChimeVolumeMultiplier: Int = 10,
-
-    // Custom sound file URIs (null = use default bundled sounds)
     val customIntroBowlUri: String? = null,
     val customBreathChimeUri: String? = null,
     val customHoldChimeUri: String? = null,
-
-    // Intro bowl fade-in option (true = fade in gradually, false = play at full volume immediately)
-    val fadeInIntroBowl: Boolean = true,
-
-    // Snooze duration in minutes
-    val snoozeDurationMinutes: Int = 5
+    val fadeInIntroBowl: Boolean = true
 ) {
     // Mode-specific parameters (used when useManualIntervalSettings is false)
     // Relaxation: H = 0.60*M, R0 = 1.25*H, Rn = 0.25*H, N = 6, p = 1.4
-    // Intense:    H = 0.90*M, R0 = 0.50*H, Rn = 0.12*H, N = 8, p = 0.75
+    // Training:   H = 0.90*M, R0 = 0.50*H, Rn = 0.12*H, N = 8, p = 0.75
 
     private val computedHoldMultiplier: Double
         get() = when (trainingMode) {
@@ -84,104 +70,119 @@ data class UserPreferences(
             TrainingMode.TRAINING -> 0.75
         }
 
-    // Computed H based on mode
-    private val computedBreathHoldDurationSeconds: Int
-        get() = (maxStaticBreathHoldDurationSeconds * computedHoldMultiplier).toInt()
+    // Computed H based on mode (requires global M)
+    private fun computedBreathHoldDurationSeconds(globalM: Int): Int =
+        (globalM * computedHoldMultiplier).toInt()
 
     // Computed R0 based on mode
-    private val computedR0Seconds: Int
-        get() = (computedBreathHoldDurationSeconds * computedR0Multiplier).toInt()
+    private fun computedR0Seconds(globalM: Int): Int =
+        (computedBreathHoldDurationSeconds(globalM) * computedR0Multiplier).toInt()
 
     // Computed Rn based on mode
-    private val computedRnSeconds: Int
-        get() = (computedBreathHoldDurationSeconds * computedRnMultiplier).toInt().coerceAtLeast(3)
+    private fun computedRnSeconds(globalM: Int): Int =
+        (computedBreathHoldDurationSeconds(globalM) * computedRnMultiplier).toInt().coerceAtLeast(3)
 
     // Effective values (manual or computed based on flag)
-    val numberOfIntervals: Int
-        get() = if (useManualIntervalSettings) manualNumberOfIntervals else computedNumberOfIntervals
+    fun numberOfIntervals(): Int =
+        if (useManualIntervalSettings) manualNumberOfIntervals else computedNumberOfIntervals
 
-    val breathHoldDurationSeconds: Int
-        get() = if (useManualIntervalSettings) manualBreathHoldDurationSeconds else computedBreathHoldDurationSeconds
+    fun breathHoldDurationSeconds(globalM: Int): Int =
+        if (useManualIntervalSettings) manualBreathHoldDurationSeconds else computedBreathHoldDurationSeconds(globalM)
 
-    val breathingIntervalDurationMaxSeconds: Int
-        get() = if (useManualIntervalSettings) manualR0Seconds else computedR0Seconds
+    fun breathingIntervalDurationMaxSeconds(globalM: Int): Int =
+        if (useManualIntervalSettings) manualR0Seconds else computedR0Seconds(globalM)
 
-    val breathingIntervalDurationMinSeconds: Int
-        get() = if (useManualIntervalSettings) manualRnSeconds.coerceAtLeast(3) else computedRnSeconds
+    fun breathingIntervalDurationMinSeconds(globalM: Int): Int =
+        if (useManualIntervalSettings) manualRnSeconds.coerceAtLeast(3) else computedRnSeconds(globalM)
 
-    private val effectivePFactor: Double
-        get() = if (useManualIntervalSettings) manualPFactor.toDouble() else computedPFactor
+    private fun effectivePFactor(): Double =
+        if (useManualIntervalSettings) manualPFactor.toDouble() else computedPFactor
 
     // Calculate breathing interval duration for a given interval index
     // Formula: R0 + (Rn - R0) * (i / (N-1))^p
-    fun breathingIntervalDuration(intervalIndex: Int): Int {
-        if (numberOfIntervals <= 1) return breathingIntervalDurationMaxSeconds
+    fun breathingIntervalDuration(intervalIndex: Int, globalM: Int): Int {
+        val n = numberOfIntervals()
+        if (n <= 1) return breathingIntervalDurationMaxSeconds(globalM)
 
-        val i = intervalIndex.coerceIn(0, numberOfIntervals - 1)
-        val n = numberOfIntervals - 1
-        val r0 = breathingIntervalDurationMaxSeconds.toDouble()
-        val rn = breathingIntervalDurationMinSeconds.toDouble()
+        val i = intervalIndex.coerceIn(0, n - 1)
+        val nMinus1 = n - 1
+        val r0 = breathingIntervalDurationMaxSeconds(globalM).toDouble()
+        val rn = breathingIntervalDurationMinSeconds(globalM).toDouble()
 
-        val ratio = i.toDouble() / n.toDouble()
-        val factor = Math.pow(ratio, effectivePFactor)
+        val ratio = i.toDouble() / nMinus1.toDouble()
+        val factor = Math.pow(ratio, effectivePFactor())
         val duration = r0 + (rn - r0) * factor
 
-        return duration.toInt().coerceAtLeast(breathingIntervalDurationMinSeconds)
+        return duration.toInt().coerceAtLeast(breathingIntervalDurationMinSeconds(globalM))
     }
 
     // Total session time in seconds (breath holds + breathing intervals, excluding intro)
-    val totalSessionTimeSeconds: Int
-        get() {
-            // All breath hold intervals
-            val totalHoldTime = numberOfIntervals * breathHoldDurationSeconds
+    fun totalSessionTimeSeconds(globalM: Int): Int {
+        val n = numberOfIntervals()
+        // All breath hold intervals
+        val totalHoldTime = n * breathHoldDurationSeconds(globalM)
 
-            // N breathing intervals (one after each hold, including the last)
-            val totalBreathingTime = if (numberOfIntervals > 0) {
-                (0 until numberOfIntervals).sumOf { breathingIntervalDuration(it) }
-            } else {
-                0
-            }
-
-            return totalHoldTime + totalBreathingTime
+        // N breathing intervals (one after each hold, including the last)
+        val totalBreathingTime = if (n > 0) {
+            (0 until n).sumOf { breathingIntervalDuration(it, globalM) }
+        } else {
+            0
         }
+
+        return totalHoldTime + totalBreathingTime
+    }
 
     // Intensity Factor (1-100)
-    // Simple score reflecting: hold vs max, recovery shortness, and round count
-    val intensityFactor: Int
-        get() {
-            val m = maxStaticBreathHoldDurationSeconds.toDouble()
-            val h = breathHoldDurationSeconds.toDouble()
-            val n = numberOfIntervals
+    fun intensityFactor(globalM: Int): Int {
+        val m = globalM.toDouble()
+        val h = breathHoldDurationSeconds(globalM).toDouble()
+        val n = numberOfIntervals()
 
-            if (m <= 0 || h <= 0 || n <= 1) return 1
+        if (m <= 0 || h <= 0 || n <= 1) return 1
 
-            // Calculate average rest interval from actual generated intervals (N intervals)
-            val avgRest = (0 until n)
-                .map { breathingIntervalDuration(it).toDouble() }
-                .average()
+        // Calculate average rest interval from actual generated intervals (N intervals)
+        val avgRest = (0 until n)
+            .map { breathingIntervalDuration(it, globalM).toDouble() }
+            .average()
 
-            // intensity = 100 * (H/M) * (H/(H+avgRest)) * (N/12)
-            val holdRatio = h / m                    // How close hold is to max
-            val recoveryStress = h / (h + avgRest)  // Shorter rest = higher stress
-            val roundFactor = n.toDouble() / 12.0   // More rounds = harder
+        // intensity = 100 * (H/M) * (H/(H+avgRest)) * (N/12)
+        val holdRatio = h / m                    // How close hold is to max
+        val recoveryStress = h / (h + avgRest)  // Shorter rest = higher stress
+        val roundFactor = n.toDouble() / 12.0   // More rounds = harder
 
-            val intensity = 100.0 * holdRatio * recoveryStress * roundFactor
-            return intensity.toInt().coerceIn(1, 100)
-        }
+        val intensity = 100.0 * holdRatio * recoveryStress * roundFactor
+        return intensity.toInt().coerceIn(1, 100)
+    }
 
     // Intensity level category based on intensity factor
-    val intensityLevel: IntensityLevel
-        get() = when {
-            intensityFactor <= 25 -> IntensityLevel.CALM
-            intensityFactor <= 50 -> IntensityLevel.CHALLENGING
-            intensityFactor <= 75 -> IntensityLevel.HARD_TRAINING
-            else -> IntensityLevel.ADVANCED
-        }
+    fun intensityLevel(globalM: Int): IntensityLevel = when {
+        intensityFactor(globalM) <= 25 -> IntensityLevel.CALM
+        intensityFactor(globalM) <= 50 -> IntensityLevel.CHALLENGING
+        intensityFactor(globalM) <= 75 -> IntensityLevel.HARD_TRAINING
+        else -> IntensityLevel.ADVANCED
+    }
+}
 
+/**
+ * A scheduled alarm with its own time, days, snooze, and session settings.
+ */
+data class Alarm(
+    val id: Long = System.currentTimeMillis(),
+    // Schedule
+    val hour: Int = 7,
+    val minute: Int = 0,
+    val enabled: Boolean = true,
+    val days: Set<Int> = setOf(1, 2, 3, 4, 5, 6, 7), // Days of week (1=Mon, 7=Sun)
+    // Snooze
+    val snoozeEnabled: Boolean = true,
+    val snoozeDurationMinutes: Int = 5,
+    // Session settings
+    val sessionSettings: SessionSettings = SessionSettings()
+) {
     // Get the next alarm occurrence (returns pair of day name and time string)
     // Returns null if alarm is disabled or no days are selected
     fun getNextAlarmInfo(): Pair<String, String>? {
-        if (!alarmEnabled || alarmDays.isEmpty()) return null
+        if (!enabled || days.isEmpty()) return null
 
         val calendar = java.util.Calendar.getInstance()
         val currentDayOfWeek = when (calendar.get(java.util.Calendar.DAY_OF_WEEK)) {
@@ -198,8 +199,8 @@ data class UserPreferences(
         val currentMinute = calendar.get(java.util.Calendar.MINUTE)
 
         // Check if alarm time has passed today
-        val alarmPassedToday = currentHour > alarmHour ||
-            (currentHour == alarmHour && currentMinute >= alarmMinute)
+        val alarmPassedToday = currentHour > hour ||
+            (currentHour == hour && currentMinute >= minute)
 
         // Find next alarm day
         for (daysAhead in 0..7) {
@@ -208,7 +209,7 @@ data class UserPreferences(
             // Skip today if alarm already passed
             if (daysAhead == 0 && alarmPassedToday) continue
 
-            if (checkDay in alarmDays) {
+            if (checkDay in days) {
                 val dayName = when {
                     daysAhead == 0 -> "Today"
                     daysAhead == 1 -> "Tomorrow"
@@ -223,7 +224,7 @@ data class UserPreferences(
                         else -> ""
                     }
                 }
-                val timeString = String.format("%02d:%02d", alarmHour, alarmMinute)
+                val timeString = String.format("%02d:%02d", hour, minute)
                 return Pair(dayName, timeString)
             }
         }
@@ -231,3 +232,22 @@ data class UserPreferences(
         return null
     }
 }
+
+/**
+ * A named saved session configuration (without schedule) for manual starts.
+ */
+data class SavedSession(
+    val id: Long = System.currentTimeMillis(),
+    val name: String,
+    val sessionSettings: SessionSettings = SessionSettings()
+)
+
+/**
+ * Global user preferences.
+ * Most session-specific settings have moved to SessionSettings (in Alarm and SavedSession).
+ */
+data class UserPreferences(
+    val maxStaticBreathHoldDurationSeconds: Int = 60,  // Global M
+    val isFirstTimeSetupComplete: Boolean = false,
+    val lastSessionSettings: SessionSettings? = null   // For "Repeat Last Session"
+)

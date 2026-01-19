@@ -41,7 +41,8 @@ fun SessionScreen(
     onNavigateHome: () -> Unit,
     onSkipIntro: () -> Unit,
     onSnooze: () -> Unit,
-    snoozeDurationMinutes: Int
+    snoozeDurationMinutes: Int,
+    snoozeEnabled: Boolean
 ) {
     val backgroundColor by animateColorAsState(
         targetValue = when (progress.state) {
@@ -99,7 +100,8 @@ fun SessionScreen(
                         onSkipIntro = onSkipIntro,
                         onSnooze = onSnooze,
                         onStop = onStop,
-                        snoozeDurationMinutes = snoozeDurationMinutes
+                        snoozeDurationMinutes = snoozeDurationMinutes,
+                        snoozeEnabled = snoozeEnabled
                     )
                 }
 
@@ -146,12 +148,14 @@ fun SessionScreen(
     }
 }
 
+@Suppress("UNUSED_PARAMETER")
 @Composable
 private fun IntroBowlButtons(
     onSkipIntro: () -> Unit,
     onSnooze: () -> Unit,
     onStop: () -> Unit,
-    snoozeDurationMinutes: Int
+    snoozeDurationMinutes: Int,
+    snoozeEnabled: Boolean
 ) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -176,36 +180,55 @@ private fun IntroBowlButtons(
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        // Snooze and Cancel buttons side by side
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            // Snooze button
-            OutlinedButton(
-                onClick = onSnooze,
-                colors = ButtonDefaults.outlinedButtonColors(
-                    contentColor = Color(0xFFFFB74D)
-                ),
-                modifier = Modifier
-                    .weight(1f)
-                    .height(56.dp)
+        if (snoozeEnabled) {
+            // Snooze and Cancel buttons side by side
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Text(
-                    text = "SNOOZE",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = Color(0xFFFFB74D)
-                )
-            }
+                // Snooze button
+                OutlinedButton(
+                    onClick = onSnooze,
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = Color(0xFFFFB74D)
+                    ),
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(56.dp)
+                ) {
+                    Text(
+                        text = "SNOOZE",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = Color(0xFFFFB74D)
+                    )
+                }
 
-            // Cancel/Stop button
+                // Cancel/Stop button
+                Button(
+                    onClick = onStop,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFFD32F2F)
+                    ),
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(56.dp)
+                ) {
+                    Text(
+                        text = "CANCEL",
+                        style = MaterialTheme.typography.titleLarge,
+                        color = Color.White
+                    )
+                }
+            }
+        } else {
+            // Only Cancel button (full width)
             Button(
                 onClick = onStop,
                 colors = ButtonDefaults.buttonColors(
                     containerColor = Color(0xFFD32F2F)
                 ),
                 modifier = Modifier
-                    .weight(1f)
+                    .fillMaxWidth()
                     .height(56.dp)
             ) {
                 Text(

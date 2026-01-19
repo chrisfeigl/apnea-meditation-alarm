@@ -2,7 +2,7 @@ package com.apneaalarm.session
 
 import android.content.Context
 import com.apneaalarm.audio.AudioPlayer
-import com.apneaalarm.data.UserPreferences
+import com.apneaalarm.data.SessionSettings
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -15,7 +15,8 @@ import kotlinx.coroutines.launch
 
 class BreathingSession(
     private val context: Context,
-    private val preferences: UserPreferences,
+    private val sessionSettings: SessionSettings,
+    private val globalM: Int,
     private val skipIntro: Boolean = false
 ) {
     private val audioPlayer = AudioPlayer(context)
@@ -27,6 +28,10 @@ class BreathingSession(
     val progress: StateFlow<SessionProgress> = _progress.asStateFlow()
 
     private var totalElapsedSeconds = 0
+
+    // Cached computed values from sessionSettings
+    private val numberOfIntervals = sessionSettings.numberOfIntervals()
+    private val breathHoldDuration = sessionSettings.breathHoldDurationSeconds(globalM)
 
     fun start() {
         if (sessionJob?.isActive == true) return
@@ -49,7 +54,7 @@ class BreathingSession(
     private suspend fun runSession() {
         _progress.value = SessionProgress(
             state = SessionState.Idle,
-            totalCycles = preferences.numberOfIntervals,
+            totalCycles = numberOfIntervals,
             isActive = true
         )
         totalElapsedSeconds = 0
@@ -71,13 +76,13 @@ class BreathingSession(
             totalElapsedSeconds = 60
             // Play hold chime to signal start
             audioPlayer.playHoldChime(
-                preferences.holdChimeVolumeMultiplier,
-                preferences.customHoldChimeUri
+                sessionSettings.holdChimeVolumeMultiplier,
+                sessionSettings.customHoldChimeUri
             )
         }
 
         // Phase 3: Breathing cycles
-        for (cycleIndex in 0 until preferences.numberOfIntervals) {
+        for (cycleIndex in 0 until numberOfIntervals) {
             if (!scope.isActive) return
 
             // Hold interval
@@ -95,9 +100,9 @@ class BreathingSession(
 
     private suspend fun playIntroBowl() {
         audioPlayer.playIntroBowl(
-            volumeMultiplier = preferences.introBowlVolumeMultiplier,
-            customSoundUri = preferences.customIntroBowlUri,
-            fadeIn = preferences.fadeInIntroBowl
+            volumeMultiplier = sessionSettings.introBowlVolumeMultiplier,
+            customSoundUri = sessionSettings.customIntroBowlUri,
+            fadeIn = sessionSettings.fadeInIntroBowl
         ) { elapsedSeconds ->
             totalElapsedSeconds = elapsedSeconds
 
@@ -109,7 +114,7 @@ class BreathingSession(
 
             _progress.value = SessionProgress(
                 state = SessionState.IntroBowl(elapsedSeconds, phase),
-                totalCycles = preferences.numberOfIntervals,
+                totalCycles = numberOfIntervals,
                 totalElapsedSeconds = totalElapsedSeconds,
                 isActive = true
             )
@@ -132,8 +137,8 @@ class BreathingSession(
             totalElapsedSeconds = 60
         )
         audioPlayer.playHoldChime(
-            preferences.holdChimeVolumeMultiplier,
-            preferences.customHoldChimeUri
+            sessionSettings.holdChimeVolumeMultiplier,
+            sessionSettings.customHoldChimeUri
         )
 
         totalElapsedSeconds = 60
@@ -145,30 +150,28 @@ class BreathingSession(
         if (cycleIndex > 0) {
             scope.launch {
                 audioPlayer.playHoldChime(
-                    preferences.holdChimeVolumeMultiplier,
-                    preferences.customHoldChimeUri
+                    sessionSettings.holdChimeVolumeMultiplier,
+                    sessionSettings.customHoldChimeUri
                 )
             }
         }
 
-        val holdDuration = preferences.breathHoldDurationSeconds
-
-        for (elapsed in 0 until holdDuration) {
+        for (elapsed in 0 until breathHoldDuration) {
             if (!scope.isActive) return
 
-            val remaining = holdDuration - elapsed
+            val remaining = breathHoldDuration - elapsed
             val isCountdown = remaining <= 3
 
             _progress.value = SessionProgress(
                 state = SessionState.Holding(
                     cycleIndex = cycleIndex,
-                    totalCycles = preferences.numberOfIntervals,
+                    totalCycles = numberOfIntervals,
                     elapsedSeconds = elapsed,
-                    targetSeconds = holdDuration,
+                    targetSeconds = breathHoldDuration,
                     isCountdown = isCountdown
                 ),
                 currentCycle = cycleIndex,
-                totalCycles = preferences.numberOfIntervals,
+                totalCycles = numberOfIntervals,
                 totalElapsedSeconds = totalElapsedSeconds + elapsed,
                 isActive = true
             )
@@ -176,19 +179,19 @@ class BreathingSession(
             delay(1000)
         }
 
-        totalElapsedSeconds += holdDuration
+        totalElapsedSeconds += breathHoldDuration
     }
 
     private suspend fun runBreathingInterval(cycleIndex: Int) {
         // Play breath chime at start of breathing interval (non-blocking)
         scope.launch {
             audioPlayer.playBreathChime(
-                preferences.breathChimeVolumeMultiplier,
-                preferences.customBreathChimeUri
+                sessionSettings.breathChimeVolumeMultiplier,
+                sessionSettings.customBreathChimeUri
             )
         }
 
-        val breathingDuration = preferences.breathingIntervalDuration(cycleIndex)
+        val breathingDuration = sessionSettings.breathingIntervalDuration(cycleIndex, globalM)
 
         for (elapsed in 0 until breathingDuration) {
             if (!scope.isActive) return
@@ -199,13 +202,13 @@ class BreathingSession(
             _progress.value = SessionProgress(
                 state = SessionState.Breathing(
                     cycleIndex = cycleIndex,
-                    totalCycles = preferences.numberOfIntervals,
+                    totalCycles = numberOfIntervals,
                     elapsedSeconds = elapsed,
                     targetSeconds = breathingDuration,
                     isCountdown = isCountdown
                 ),
                 currentCycle = cycleIndex,
-                totalCycles = preferences.numberOfIntervals,
+                totalCycles = numberOfIntervals,
                 totalElapsedSeconds = totalElapsedSeconds + elapsed,
                 isActive = true
             )
@@ -219,8 +222,8 @@ class BreathingSession(
     private fun startFinishingBowl() {
         _progress.value = SessionProgress(
             state = SessionState.Finishing(elapsedSeconds = 0, isChimePhase = false),
-            currentCycle = preferences.numberOfIntervals,
-            totalCycles = preferences.numberOfIntervals,
+            currentCycle = numberOfIntervals,
+            totalCycles = numberOfIntervals,
             totalElapsedSeconds = totalElapsedSeconds,
             isActive = true
         )
@@ -228,7 +231,7 @@ class BreathingSession(
         // Play bowl at max volume (multiplier 10)
         audioPlayer.startContinuousBowl(
             10,  // Max volume
-            preferences.customIntroBowlUri
+            sessionSettings.customIntroBowlUri
         )
 
         // Start a timer for 3 minutes, then switch to chimes
@@ -245,7 +248,7 @@ class BreathingSession(
 
             // After 3 minutes, switch to repeated hold chimes at max volume
             if (!isActive) return@launch
-            audioPlayer.startContinuousHoldChime(preferences.customHoldChimeUri)
+            audioPlayer.startContinuousHoldChime(sessionSettings.customHoldChimeUri)
 
             // Continue tracking time in chime phase
             var chimeElapsed = 0

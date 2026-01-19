@@ -17,6 +17,7 @@ import androidx.core.app.NotificationCompat
 import com.apneaalarm.MainActivity
 import com.apneaalarm.R
 import com.apneaalarm.data.PreferencesRepository
+import com.apneaalarm.data.SessionSettings
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -38,17 +39,40 @@ class SessionService : Service() {
     private val _sessionProgress = MutableStateFlow(SessionProgress())
     val sessionProgress: StateFlow<SessionProgress> = _sessionProgress.asStateFlow()
 
+    // Snooze info for alarm-triggered sessions
+    private var currentAlarmId: Long = -1L
+    private var currentSnoozeDuration: Int = 5
+    private var currentSnoozeEnabled: Boolean = true
+
+    // Expose snooze state
+    val snoozeEnabled: Boolean get() = currentSnoozeEnabled
+    val snoozeDuration: Int get() = currentSnoozeDuration
+    val alarmId: Long get() = currentAlarmId
+
     companion object {
         const val ACTION_START_SESSION = "com.apneaalarm.START_SESSION"
         const val ACTION_STOP_SESSION = "com.apneaalarm.STOP_SESSION"
         const val ACTION_STOP_BROADCAST = "com.apneaalarm.STOP_BROADCAST"
+
+        // Intent extras
         const val EXTRA_SKIP_INTRO = "skip_intro"
+        const val EXTRA_ALARM_ID = "alarm_id"
+        const val EXTRA_SESSION_SETTINGS_JSON = "session_settings_json"
+        const val EXTRA_SNOOZE_DURATION = "snooze_duration"
+        const val EXTRA_SNOOZE_ENABLED = "snooze_enabled"
+        const val EXTRA_GLOBAL_M = "global_m"
+
         private const val NOTIFICATION_ID = 1
         private const val CHANNEL_ID = "apnea_alarm_session"
         private const val CHANNEL_ID_FINISH = "apnea_alarm_finish"
     }
 
     private var pendingSkipIntro = false
+    private var pendingAlarmId: Long = -1L
+    private var pendingSessionSettingsJson: String? = null
+    private var pendingGlobalM: Int = 60
+    private var pendingSnoozeDuration: Int = 5
+    private var pendingSnoozeEnabled: Boolean = true
 
     inner class LocalBinder : Binder() {
         fun getService(): SessionService = this@SessionService
@@ -67,6 +91,11 @@ class SessionService : Service() {
         when (intent?.action) {
             ACTION_START_SESSION -> {
                 pendingSkipIntro = intent.getBooleanExtra(EXTRA_SKIP_INTRO, false)
+                pendingAlarmId = intent.getLongExtra(EXTRA_ALARM_ID, -1L)
+                pendingSessionSettingsJson = intent.getStringExtra(EXTRA_SESSION_SETTINGS_JSON)
+                pendingGlobalM = intent.getIntExtra(EXTRA_GLOBAL_M, 60)
+                pendingSnoozeDuration = intent.getIntExtra(EXTRA_SNOOZE_DURATION, 5)
+                pendingSnoozeEnabled = intent.getBooleanExtra(EXTRA_SNOOZE_ENABLED, true)
                 startSession()
             }
             ACTION_STOP_SESSION -> stopSession()
@@ -115,9 +144,48 @@ class SessionService : Service() {
             val repository = PreferencesRepository(applicationContext)
             val prefs = repository.userPreferences.first()
 
+            // Determine session settings and global M
+            val sessionSettings: SessionSettings
+            val globalM: Int
+
+            if (pendingSessionSettingsJson != null) {
+                // Manual session with settings passed in intent
+                sessionSettings = repository.sessionSettingsFromJson(pendingSessionSettingsJson!!)
+                    ?: SessionSettings()
+                globalM = if (pendingGlobalM > 0) pendingGlobalM else prefs.maxStaticBreathHoldDurationSeconds
+                // Manual sessions don't have snooze by default
+                currentSnoozeEnabled = false
+                currentSnoozeDuration = 5
+                currentAlarmId = -1L
+            } else if (pendingAlarmId > 0) {
+                // Alarm-triggered session - load settings from alarm
+                val alarm = repository.getAlarmById(pendingAlarmId)
+                if (alarm != null) {
+                    sessionSettings = alarm.sessionSettings
+                    currentSnoozeEnabled = pendingSnoozeEnabled
+                    currentSnoozeDuration = pendingSnoozeDuration
+                    currentAlarmId = pendingAlarmId
+                } else {
+                    // Alarm not found, use defaults
+                    sessionSettings = SessionSettings()
+                    currentSnoozeEnabled = pendingSnoozeEnabled
+                    currentSnoozeDuration = pendingSnoozeDuration
+                    currentAlarmId = pendingAlarmId
+                }
+                globalM = prefs.maxStaticBreathHoldDurationSeconds
+            } else {
+                // Fallback: use last session settings or defaults
+                sessionSettings = prefs.lastSessionSettings ?: SessionSettings()
+                globalM = prefs.maxStaticBreathHoldDurationSeconds
+                currentSnoozeEnabled = false
+                currentSnoozeDuration = 5
+                currentAlarmId = -1L
+            }
+
             breathingSession = BreathingSession(
                 context = applicationContext,
-                preferences = prefs,
+                sessionSettings = sessionSettings,
+                globalM = globalM,
                 skipIntro = pendingSkipIntro
             )
 

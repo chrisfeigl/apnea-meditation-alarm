@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -29,36 +30,43 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.apneaalarm.data.IntensityLevel
+import com.apneaalarm.data.SessionSettings
 import com.apneaalarm.data.TrainingMode
-import com.apneaalarm.data.UserPreferences
-import androidx.compose.ui.graphics.Color
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun IntervalSettingsScreen(
-    preferences: UserPreferences,
+fun NewSessionScreen(
+    initialSettings: SessionSettings,
+    globalM: Int,
     onNavigateBack: () -> Unit,
-    onTrainingModeChanged: (TrainingMode) -> Unit,
-    onMaxBreathHoldChanged: (Int) -> Unit,
-    onUseManualChanged: (Boolean) -> Unit,
-    onManualSettingsChanged: (h: Int?, r0: Int?, rn: Int?, n: Int?, p: Float?) -> Unit
+    onStartSession: (SessionSettings) -> Unit,
+    onSaveSession: (name: String, settings: SessionSettings) -> Unit
 ) {
+    var settings by remember { mutableStateOf(initialSettings) }
+    var showSaveDialog by remember { mutableStateOf(false) }
+    var sessionName by remember { mutableStateOf("") }
+
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Interval Settings") },
+                title = { Text("New Session") },
                 navigationIcon = {
                     TextButton(onClick = onNavigateBack) {
                         Text("\u2190 Back")
+                    }
+                },
+                actions = {
+                    TextButton(onClick = { showSaveDialog = true }) {
+                        Text("Save")
                     }
                 }
             )
@@ -73,55 +81,27 @@ fun IntervalSettingsScreen(
         ) {
             Spacer(modifier = Modifier.height(8.dp))
 
-            // Intention & Max Breath Hold Card
-            TrainingModeCard(
-                preferences = preferences,
+            // Intention Card
+            IntentionCard(
+                trainingMode = settings.trainingMode,
                 onTrainingModeChanged = { mode ->
-                    onTrainingModeChanged(mode)
-                    // Auto-reset manual params to match the selected mode
-                    val m = preferences.maxStaticBreathHoldDurationSeconds
-                    when (mode) {
-                        TrainingMode.RELAXATION -> {
-                            val h = (0.60 * m).toInt()
-                            val r0 = (1.25 * h).toInt()
-                            val rn = (0.25 * h).toInt().coerceAtLeast(3)
-                            onManualSettingsChanged(h, r0, rn, 6, 1.4f)
-                        }
-                        TrainingMode.TRAINING -> {
-                            val h = (0.90 * m).toInt()
-                            val r0 = (0.50 * h).toInt()
-                            val rn = (0.12 * h).toInt().coerceAtLeast(3)
-                            onManualSettingsChanged(h, r0, rn, 8, 0.75f)
-                        }
+                    settings = settings.copy(trainingMode = mode)
+                    // Auto-update manual params when mode changes
+                    if (!settings.useManualIntervalSettings) {
+                        settings = updateManualParamsForMode(settings, globalM, mode)
                     }
-                },
-                onMaxBreathHoldChanged = onMaxBreathHoldChanged
+                }
             )
 
             Spacer(modifier = Modifier.height(16.dp))
 
             // Manual Settings Toggle
-            ManualSettingsToggle(
-                useManual = preferences.useManualIntervalSettings,
+            ManualSettingsToggleCard(
+                useManual = settings.useManualIntervalSettings,
                 onUseManualChanged = { enabled ->
-                    onUseManualChanged(enabled)
-                    // When enabling manual mode, initialize params to current training mode
+                    settings = settings.copy(useManualIntervalSettings = enabled)
                     if (enabled) {
-                        val m = preferences.maxStaticBreathHoldDurationSeconds
-                        when (preferences.trainingMode) {
-                            TrainingMode.RELAXATION -> {
-                                val h = (0.60 * m).toInt()
-                                val r0 = (1.25 * h).toInt()
-                                val rn = (0.25 * h).toInt().coerceAtLeast(3)
-                                onManualSettingsChanged(h, r0, rn, 6, 1.4f)
-                            }
-                            TrainingMode.TRAINING -> {
-                                val h = (0.90 * m).toInt()
-                                val r0 = (0.50 * h).toInt()
-                                val rn = (0.12 * h).toInt().coerceAtLeast(3)
-                                onManualSettingsChanged(h, r0, rn, 8, 0.75f)
-                            }
-                        }
+                        settings = updateManualParamsForMode(settings, globalM, settings.trainingMode)
                     }
                 }
             )
@@ -129,27 +109,115 @@ fun IntervalSettingsScreen(
             Spacer(modifier = Modifier.height(16.dp))
 
             // Manual Settings Card (shown when manual mode is enabled)
-            if (preferences.useManualIntervalSettings) {
-                ManualSettingsCard(
-                    preferences = preferences,
-                    onManualSettingsChanged = onManualSettingsChanged
+            if (settings.useManualIntervalSettings) {
+                ManualSettingsCardForSession(
+                    settings = settings,
+                    globalM = globalM,
+                    onSettingsChanged = { settings = it }
                 )
                 Spacer(modifier = Modifier.height(16.dp))
             }
 
-            // Session Preview (always shown)
-            SessionPreviewCard(preferences = preferences)
+            // Session Preview
+            SessionPreviewCardForSettings(settings = settings, globalM = globalM)
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Audio Settings Card (expandable)
+            AudioSettingsCardForSession(
+                settings = settings,
+                onSettingsChanged = { settings = it }
+            )
 
             Spacer(modifier = Modifier.height(24.dp))
+
+            // Start Session Button
+            Button(
+                onClick = { onStartSession(settings) },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp)
+            ) {
+                Text(
+                    text = "START SESSION",
+                    style = MaterialTheme.typography.titleMedium
+                )
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+        }
+    }
+
+    // Save Session Dialog
+    if (showSaveDialog) {
+        AlertDialog(
+            onDismissRequest = { showSaveDialog = false },
+            title = { Text("Save Session") },
+            text = {
+                OutlinedTextField(
+                    value = sessionName,
+                    onValueChange = { sessionName = it },
+                    label = { Text("Session Name") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        if (sessionName.isNotBlank()) {
+                            onSaveSession(sessionName.trim(), settings)
+                            showSaveDialog = false
+                            sessionName = ""
+                        }
+                    },
+                    enabled = sessionName.isNotBlank()
+                ) {
+                    Text("Save")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showSaveDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+}
+
+private fun updateManualParamsForMode(settings: SessionSettings, globalM: Int, mode: TrainingMode): SessionSettings {
+    return when (mode) {
+        TrainingMode.RELAXATION -> {
+            val h = (0.60 * globalM).toInt()
+            val r0 = (1.25 * h).toInt()
+            val rn = (0.25 * h).toInt().coerceAtLeast(3)
+            settings.copy(
+                manualBreathHoldDurationSeconds = h,
+                manualR0Seconds = r0,
+                manualRnSeconds = rn,
+                manualNumberOfIntervals = 6,
+                manualPFactor = 1.4f
+            )
+        }
+        TrainingMode.TRAINING -> {
+            val h = (0.90 * globalM).toInt()
+            val r0 = (0.50 * h).toInt()
+            val rn = (0.12 * h).toInt().coerceAtLeast(3)
+            settings.copy(
+                manualBreathHoldDurationSeconds = h,
+                manualR0Seconds = r0,
+                manualRnSeconds = rn,
+                manualNumberOfIntervals = 8,
+                manualPFactor = 0.75f
+            )
         }
     }
 }
 
 @Composable
-private fun TrainingModeCard(
-    preferences: UserPreferences,
-    onTrainingModeChanged: (TrainingMode) -> Unit,
-    onMaxBreathHoldChanged: (Int) -> Unit
+private fun IntentionCard(
+    trainingMode: TrainingMode,
+    onTrainingModeChanged: (TrainingMode) -> Unit
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -176,11 +244,11 @@ private fun TrainingModeCard(
                     onClick = { onTrainingModeChanged(TrainingMode.RELAXATION) },
                     modifier = Modifier.weight(1f),
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = if (preferences.trainingMode == TrainingMode.RELAXATION)
+                        containerColor = if (trainingMode == TrainingMode.RELAXATION)
                             MaterialTheme.colorScheme.secondary
                         else
                             MaterialTheme.colorScheme.surfaceVariant,
-                        contentColor = if (preferences.trainingMode == TrainingMode.RELAXATION)
+                        contentColor = if (trainingMode == TrainingMode.RELAXATION)
                             MaterialTheme.colorScheme.onSecondary
                         else
                             MaterialTheme.colorScheme.onSurfaceVariant
@@ -193,11 +261,11 @@ private fun TrainingModeCard(
                     onClick = { onTrainingModeChanged(TrainingMode.TRAINING) },
                     modifier = Modifier.weight(1f),
                     colors = ButtonDefaults.outlinedButtonColors(
-                        containerColor = if (preferences.trainingMode == TrainingMode.TRAINING)
+                        containerColor = if (trainingMode == TrainingMode.TRAINING)
                             MaterialTheme.colorScheme.tertiary
                         else
                             MaterialTheme.colorScheme.surfaceVariant,
-                        contentColor = if (preferences.trainingMode == TrainingMode.TRAINING)
+                        contentColor = if (trainingMode == TrainingMode.TRAINING)
                             MaterialTheme.colorScheme.onTertiary
                         else
                             MaterialTheme.colorScheme.onSurfaceVariant
@@ -206,69 +274,12 @@ private fun TrainingModeCard(
                     Text("Training")
                 }
             }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            Text(
-                text = "Maximum Breath Hold (M)",
-                style = MaterialTheme.typography.titleSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            var maxBreathHoldText by remember(preferences.maxStaticBreathHoldDurationSeconds) {
-                mutableStateOf(preferences.maxStaticBreathHoldDurationSeconds.toString())
-            }
-
-            Row(
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                OutlinedTextField(
-                    value = maxBreathHoldText,
-                    onValueChange = { newValue ->
-                        maxBreathHoldText = newValue
-                        newValue.toIntOrNull()?.let { seconds ->
-                            if (seconds in 10..600) {
-                                onMaxBreathHoldChanged(seconds)
-                            }
-                        }
-                    },
-                    modifier = Modifier.width(100.dp),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    singleLine = true,
-                    suffix = { Text("s") }
-                )
-
-                Spacer(modifier = Modifier.width(12.dp))
-
-                Text(
-                    text = formatTime(preferences.maxStaticBreathHoldDurationSeconds),
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-
-            if (!preferences.useManualIntervalSettings) {
-                Spacer(modifier = Modifier.height(12.dp))
-
-                val holdPercent = when (preferences.trainingMode) {
-                    TrainingMode.RELAXATION -> "60%"
-                    TrainingMode.TRAINING -> "90%"
-                }
-
-                Text(
-                    text = "Breath hold will be $holdPercent of M = ${preferences.breathHoldDurationSeconds}s",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-                )
-            }
         }
     }
 }
 
 @Composable
-private fun ManualSettingsToggle(
+private fun ManualSettingsToggleCard(
     useManual: Boolean,
     onUseManualChanged: (Boolean) -> Unit
 ) {
@@ -307,9 +318,10 @@ private fun ManualSettingsToggle(
 }
 
 @Composable
-private fun ManualSettingsCard(
-    preferences: UserPreferences,
-    onManualSettingsChanged: (h: Int?, r0: Int?, rn: Int?, n: Int?, p: Float?) -> Unit
+private fun ManualSettingsCardForSession(
+    settings: SessionSettings,
+    globalM: Int,
+    onSettingsChanged: (SessionSettings) -> Unit
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -329,76 +341,84 @@ private fun ManualSettingsCard(
             Spacer(modifier = Modifier.height(16.dp))
 
             // H - Breath Hold Duration
-            var hText by remember(preferences.manualBreathHoldDurationSeconds) {
-                mutableStateOf(preferences.manualBreathHoldDurationSeconds.toString())
+            var hText by remember(settings.manualBreathHoldDurationSeconds) {
+                mutableStateOf(settings.manualBreathHoldDurationSeconds.toString())
             }
-            NumberInputRow(
+            NumberInputRowForSession(
                 label = "H (Breath Hold)",
                 value = hText,
                 suffix = "s",
                 description = "Duration of each breath hold",
                 onValueChange = { newValue ->
                     hText = newValue
-                    newValue.toIntOrNull()?.let { onManualSettingsChanged(it, null, null, null, null) }
+                    newValue.toIntOrNull()?.let {
+                        onSettingsChanged(settings.copy(manualBreathHoldDurationSeconds = it))
+                    }
                 }
             )
 
             Spacer(modifier = Modifier.height(12.dp))
 
             // R0 - Max Breathing Interval
-            var r0Text by remember(preferences.manualR0Seconds) {
-                mutableStateOf(preferences.manualR0Seconds.toString())
+            var r0Text by remember(settings.manualR0Seconds) {
+                mutableStateOf(settings.manualR0Seconds.toString())
             }
-            NumberInputRow(
+            NumberInputRowForSession(
                 label = "R0 (Max Breathing)",
                 value = r0Text,
                 suffix = "s",
                 description = "First breathing interval",
                 onValueChange = { newValue ->
                     r0Text = newValue
-                    newValue.toIntOrNull()?.let { onManualSettingsChanged(null, it, null, null, null) }
+                    newValue.toIntOrNull()?.let {
+                        onSettingsChanged(settings.copy(manualR0Seconds = it))
+                    }
                 }
             )
 
             Spacer(modifier = Modifier.height(12.dp))
 
             // Rn - Min Breathing Interval
-            var rnText by remember(preferences.manualRnSeconds) {
-                mutableStateOf(preferences.manualRnSeconds.toString())
+            var rnText by remember(settings.manualRnSeconds) {
+                mutableStateOf(settings.manualRnSeconds.toString())
             }
-            NumberInputRow(
+            NumberInputRowForSession(
                 label = "Rn (Min Breathing)",
                 value = rnText,
                 suffix = "s",
                 description = "Final breathing interval",
                 onValueChange = { newValue ->
                     rnText = newValue
-                    newValue.toIntOrNull()?.let { onManualSettingsChanged(null, null, it, null, null) }
+                    newValue.toIntOrNull()?.let {
+                        onSettingsChanged(settings.copy(manualRnSeconds = it))
+                    }
                 }
             )
 
             Spacer(modifier = Modifier.height(12.dp))
 
             // N - Number of Intervals
-            var nText by remember(preferences.manualNumberOfIntervals) {
-                mutableStateOf(preferences.manualNumberOfIntervals.toString())
+            var nText by remember(settings.manualNumberOfIntervals) {
+                mutableStateOf(settings.manualNumberOfIntervals.toString())
             }
-            NumberInputRow(
+            NumberInputRowForSession(
                 label = "N (Intervals)",
                 value = nText,
                 suffix = "",
                 description = "Number of breath hold cycles",
                 onValueChange = { newValue ->
                     nText = newValue
-                    newValue.toIntOrNull()?.let { onManualSettingsChanged(null, null, null, it, null) }
+                    newValue.toIntOrNull()?.let {
+                        onSettingsChanged(settings.copy(manualNumberOfIntervals = it))
+                    }
                 }
             )
 
             Spacer(modifier = Modifier.height(16.dp))
 
             // p - Curve Factor (slider)
-            var pValue by remember(preferences.manualPFactor) {
-                mutableFloatStateOf(preferences.manualPFactor)
+            var pValue by remember(settings.manualPFactor) {
+                mutableFloatStateOf(settings.manualPFactor)
             }
             Text(
                 text = "p (Curve Factor): %.2f".format(pValue),
@@ -413,56 +433,28 @@ private fun ManualSettingsCard(
             Slider(
                 value = pValue,
                 onValueChange = { pValue = it },
-                onValueChangeFinished = { onManualSettingsChanged(null, null, null, null, pValue) },
+                onValueChangeFinished = { onSettingsChanged(settings.copy(manualPFactor = pValue)) },
                 valueRange = 0.1f..2.0f,
                 modifier = Modifier.fillMaxWidth()
             )
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text(
-                    text = "Quick start",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.6f)
-                )
-                Text(
-                    text = "Gradual",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.6f)
-                )
-            }
 
             Spacer(modifier = Modifier.height(16.dp))
 
             OutlinedButton(
                 onClick = {
-                    val m = preferences.maxStaticBreathHoldDurationSeconds
-                    when (preferences.trainingMode) {
-                        TrainingMode.RELAXATION -> {
-                            val h = (0.60 * m).toInt()
-                            val r0 = (1.25 * h).toInt()
-                            val rn = (0.25 * h).toInt().coerceAtLeast(3)
-                            onManualSettingsChanged(h, r0, rn, 6, 1.4f)
-                        }
-                        TrainingMode.TRAINING -> {
-                            val h = (0.90 * m).toInt()
-                            val r0 = (0.50 * h).toInt()
-                            val rn = (0.12 * h).toInt().coerceAtLeast(3)
-                            onManualSettingsChanged(h, r0, rn, 8, 0.75f)
-                        }
-                    }
+                    val updated = updateManualParamsForMode(settings, globalM, settings.trainingMode)
+                    onSettingsChanged(updated)
                 },
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text("Reset to ${preferences.trainingMode.name.lowercase().replaceFirstChar { it.uppercase() }} Defaults")
+                Text("Reset to ${settings.trainingMode.name.lowercase().replaceFirstChar { it.uppercase() }} Defaults")
             }
         }
     }
 }
 
 @Composable
-private fun NumberInputRow(
+private fun NumberInputRowForSession(
     label: String,
     value: String,
     suffix: String,
@@ -500,19 +492,28 @@ private fun NumberInputRow(
 }
 
 @Composable
-private fun SessionPreviewCard(preferences: UserPreferences) {
-    // Color based on intensity level
-    val containerColor = when (preferences.intensityLevel) {
-        IntensityLevel.CALM -> Color(0xFF4CAF50)           // Green
-        IntensityLevel.CHALLENGING -> Color(0xFFFFC107)    // Amber
-        IntensityLevel.HARD_TRAINING -> Color(0xFFFF9800)    // Orange
-        IntensityLevel.ADVANCED -> Color(0xFFF44336)       // Red
+private fun SessionPreviewCardForSettings(settings: SessionSettings, globalM: Int) {
+    val intensityFactor = settings.intensityFactor(globalM)
+    val intensityLevel = settings.intensityLevel(globalM)
+
+    val containerColor = when (intensityLevel) {
+        IntensityLevel.CALM -> Color(0xFF4CAF50)
+        IntensityLevel.CHALLENGING -> Color(0xFFFFC107)
+        IntensityLevel.HARD_TRAINING -> Color(0xFFFF9800)
+        IntensityLevel.ADVANCED -> Color(0xFFF44336)
     }
-    val contentColor = when (preferences.intensityLevel) {
+    val contentColor = when (intensityLevel) {
         IntensityLevel.CALM -> Color.White
         IntensityLevel.CHALLENGING -> Color.Black
         IntensityLevel.HARD_TRAINING -> Color.Black
         IntensityLevel.ADVANCED -> Color.White
+    }
+
+    val numberOfIntervals = settings.numberOfIntervals()
+    val breathHoldDuration = settings.breathHoldDurationSeconds(globalM)
+    val totalTime = settings.totalSessionTimeSeconds(globalM)
+    val intervals = (0 until numberOfIntervals).map { i ->
+        settings.breathingIntervalDuration(i, globalM)
     }
 
     Card(
@@ -524,7 +525,6 @@ private fun SessionPreviewCard(preferences: UserPreferences) {
         Column(
             modifier = Modifier.padding(16.dp)
         ) {
-            // Header row with title and intensity
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -537,12 +537,12 @@ private fun SessionPreviewCard(preferences: UserPreferences) {
                 )
                 Column(horizontalAlignment = Alignment.End) {
                     Text(
-                        text = "Intensity ${preferences.intensityFactor}",
+                        text = "Intensity $intensityFactor",
                         style = MaterialTheme.typography.titleLarge,
                         color = contentColor
                     )
                     Text(
-                        text = preferences.intensityLevel.label,
+                        text = intensityLevel.label,
                         style = MaterialTheme.typography.labelSmall,
                         color = contentColor.copy(alpha = 0.8f)
                     )
@@ -551,7 +551,6 @@ private fun SessionPreviewCard(preferences: UserPreferences) {
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Summary row
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween
@@ -563,7 +562,7 @@ private fun SessionPreviewCard(preferences: UserPreferences) {
                         color = contentColor.copy(alpha = 0.7f)
                     )
                     Text(
-                        text = "${preferences.numberOfIntervals} x ${preferences.breathHoldDurationSeconds}s",
+                        text = "$numberOfIntervals x ${breathHoldDuration}s",
                         style = MaterialTheme.typography.bodyLarge,
                         color = contentColor
                     )
@@ -575,7 +574,7 @@ private fun SessionPreviewCard(preferences: UserPreferences) {
                         color = contentColor.copy(alpha = 0.7f)
                     )
                     Text(
-                        text = formatTime(preferences.totalSessionTimeSeconds),
+                        text = formatDuration(totalTime),
                         style = MaterialTheme.typography.bodyLarge,
                         color = contentColor
                     )
@@ -592,11 +591,6 @@ private fun SessionPreviewCard(preferences: UserPreferences) {
 
             Spacer(modifier = Modifier.height(4.dp))
 
-            // Show all breathing intervals (N intervals for N breath holds)
-            val intervals = (0 until preferences.numberOfIntervals).map { i ->
-                preferences.breathingIntervalDuration(i)
-            }
-
             Text(
                 text = intervals.joinToString(" \u2192 ") { "${it}s" },
                 style = MaterialTheme.typography.bodyMedium,
@@ -606,7 +600,130 @@ private fun SessionPreviewCard(preferences: UserPreferences) {
     }
 }
 
-private fun formatTime(totalSeconds: Int): String {
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun AudioSettingsCardForSession(
+    settings: SessionSettings,
+    onSettingsChanged: (SessionSettings) -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant
+        ),
+        onClick = { expanded = !expanded }
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Audio Settings",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    text = if (expanded) "\u25B2" else "\u25BC",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            if (expanded) {
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Volume sliders
+                VolumeSlider(
+                    label = "Intro Bowl",
+                    value = settings.introBowlVolumeMultiplier,
+                    onValueChange = {
+                        onSettingsChanged(settings.copy(introBowlVolumeMultiplier = it))
+                    }
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                VolumeSlider(
+                    label = "Breath Chime",
+                    value = settings.breathChimeVolumeMultiplier,
+                    onValueChange = {
+                        onSettingsChanged(settings.copy(breathChimeVolumeMultiplier = it))
+                    }
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                VolumeSlider(
+                    label = "Hold Chime",
+                    value = settings.holdChimeVolumeMultiplier,
+                    onValueChange = {
+                        onSettingsChanged(settings.copy(holdChimeVolumeMultiplier = it))
+                    }
+                )
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Fade in toggle
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Fade In Intro Bowl",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Switch(
+                        checked = settings.fadeInIntroBowl,
+                        onCheckedChange = {
+                            onSettingsChanged(settings.copy(fadeInIntroBowl = it))
+                        }
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun VolumeSlider(
+    label: String,
+    value: Int,
+    onValueChange: (Int) -> Unit
+) {
+    Column {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Text(
+                text = "${value * 10}%",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        Slider(
+            value = value.toFloat(),
+            onValueChange = { onValueChange(it.toInt()) },
+            valueRange = 1f..10f,
+            steps = 8,
+            modifier = Modifier.fillMaxWidth()
+        )
+    }
+}
+
+private fun formatDuration(totalSeconds: Int): String {
     val minutes = totalSeconds / 60
     val seconds = totalSeconds % 60
     return if (minutes > 0) {
