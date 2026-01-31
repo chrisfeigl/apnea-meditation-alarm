@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -52,6 +53,7 @@ fun SessionScreen(
     snoozeEnabled: Boolean
 ) {
     var showHelpDialog by remember { mutableStateOf(false) }
+    var showStopConfirmation by remember { mutableStateOf(false) }
 
     val backgroundColor by animateColorAsState(
         targetValue = when (val state = progress.state) {
@@ -121,7 +123,7 @@ fun SessionScreen(
                         color = Color.White
                     )
                     Spacer(modifier = Modifier.height(64.dp))
-                    SessionButtons(onStop = onStop, onPause = onPause, onHome = onNavigateHome)
+                    SessionButtons(onStop = { showStopConfirmation = true }, onPause = onPause, onHome = onNavigateHome)
                 }
 
                 is SessionState.IntroBowl -> {
@@ -131,7 +133,7 @@ fun SessionScreen(
                         onSkipIntro = onSkipIntro,
                         onSnooze = onSnooze,
                         onPause = onPause,
-                        onStop = onStop,
+                        onStop = { showStopConfirmation = true },
                         snoozeDurationMinutes = snoozeDurationMinutes,
                         snoozeEnabled = snoozeEnabled
                     )
@@ -140,23 +142,23 @@ fun SessionScreen(
                 is SessionState.PreHoldCountdown -> {
                     PreHoldCountdownContent(state)
                     Spacer(modifier = Modifier.height(64.dp))
-                    SessionButtons(onStop = onStop, onPause = onPause, onHome = onNavigateHome)
+                    SessionButtons(onStop = { showStopConfirmation = true }, onPause = onPause, onHome = onNavigateHome)
                 }
 
                 is SessionState.Holding -> {
                     HoldingContent(state)
                     Spacer(modifier = Modifier.height(64.dp))
-                    SessionButtons(onStop = onStop, onPause = onPause, onHome = onNavigateHome)
+                    SessionButtons(onStop = { showStopConfirmation = true }, onPause = onPause, onHome = onNavigateHome)
                 }
 
                 is SessionState.Breathing -> {
                     BreathingContent(state)
                     Spacer(modifier = Modifier.height(64.dp))
-                    SessionButtons(onStop = onStop, onPause = onPause, onHome = onNavigateHome)
+                    SessionButtons(onStop = { showStopConfirmation = true }, onPause = onPause, onHome = onNavigateHome)
                 }
 
                 is SessionState.Finishing -> {
-                    FinishingContent(onStop = onStop, onPause = onPause, onHome = onNavigateHome, totalCycles = progress.totalCycles)
+                    FinishingContent(onStop = { showStopConfirmation = true }, onPause = onPause, onHome = onNavigateHome, totalCycles = progress.totalCycles)
                 }
 
                 is SessionState.Stopped -> {
@@ -180,7 +182,7 @@ fun SessionScreen(
                     PausedContent(
                         previousState = state.previousState,
                         onResume = onResume,
-                        onStop = onStop,
+                        onStop = { showStopConfirmation = true },
                         onHome = onNavigateHome
                     )
                 }
@@ -194,6 +196,33 @@ fun SessionScreen(
             title = "During a Session",
             content = HelpContent.session,
             onDismiss = { showHelpDialog = false }
+        )
+    }
+
+    // Stop Confirmation Dialog
+    if (showStopConfirmation) {
+        AlertDialog(
+            onDismissRequest = { showStopConfirmation = false },
+            title = { Text("Stop Session?") },
+            text = { Text("Are you sure you want to stop the current session?") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showStopConfirmation = false
+                        onStop()
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFFD32F2F)
+                    )
+                ) {
+                    Text("Stop")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showStopConfirmation = false }) {
+                    Text("Continue Session")
+                }
+            }
         )
     }
 }
