@@ -21,21 +21,29 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.width
+import androidx.compose.material3.Divider
+import androidx.compose.ui.text.font.FontWeight
 import com.apneaalarm.data.Alarm
 import com.apneaalarm.data.IntensityLevel
 import com.apneaalarm.data.SessionSettings
+import com.apneaalarm.data.UserMetrics
 import com.apneaalarm.data.UserPreferences
 
 @Composable
 fun HomeScreen(
     preferences: UserPreferences,
     alarms: List<Alarm>,
+    metrics: UserMetrics,
     isSessionActive: Boolean,
-    onNavigateToSettings: () -> Unit,
+    onNavigateToAlarms: () -> Unit,
     onNavigateToSession: () -> Unit,
     onNavigateToNewSession: () -> Unit,
     onNavigateToSavedSessions: () -> Unit,
     onNavigateToAlarmEdit: (Long) -> Unit,
+    onNavigateToHelp: () -> Unit,
+    onNavigateToBreathHoldTest: () -> Unit,
+    onNavigateToStatistics: () -> Unit,
     onRepeatLastSession: () -> Unit
 ) {
     val globalM = preferences.maxStaticBreathHoldDurationSeconds
@@ -111,6 +119,16 @@ fun HomeScreen(
             Spacer(modifier = Modifier.height(16.dp))
         }
 
+        // Quick Stats Tile (shows streak and weekly sessions)
+        if (metrics.totalSessions > 0) {
+            QuickStatsTile(
+                currentStreak = metrics.currentStreak,
+                sessionsThisWeek = metrics.sessionsThisWeek,
+                onClick = onNavigateToStatistics
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+        }
+
         Spacer(modifier = Modifier.weight(1f))
 
         // New Session Button
@@ -140,12 +158,42 @@ fun HomeScreen(
             Spacer(modifier = Modifier.height(12.dp))
         }
 
-        // Settings Button
+        // Static Breath Hold Test Button
         OutlinedButton(
-            onClick = onNavigateToSettings,
+            onClick = onNavigateToBreathHoldTest,
             modifier = Modifier.fillMaxWidth()
         ) {
-            Text("Settings")
+            Text("Static Breath Hold Test")
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // Alarms Button
+        OutlinedButton(
+            onClick = onNavigateToAlarms,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text("Alarms")
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // Statistics Button
+        OutlinedButton(
+            onClick = onNavigateToStatistics,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text("Statistics")
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // Help Button
+        OutlinedButton(
+            onClick = onNavigateToHelp,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text("Help")
         }
 
         Spacer(modifier = Modifier.height(24.dp))
@@ -339,6 +387,65 @@ private fun LastSessionTile(
                 )
             ) {
                 Text("REPEAT")
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun QuickStatsTile(
+    currentStreak: Int,
+    sessionsThisWeek: Int,
+    onClick: () -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        onClick = onClick,
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.secondaryContainer
+        )
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            horizontalArrangement = Arrangement.SpaceEvenly,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    text = "$currentStreak",
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer
+                )
+                Text(
+                    text = if (currentStreak == 1) "day streak" else "day streak",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f)
+                )
+            }
+
+            Divider(
+                modifier = Modifier
+                    .height(40.dp)
+                    .width(1.dp),
+                color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.3f)
+            )
+
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    text = "$sessionsThisWeek",
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer
+                )
+                Text(
+                    text = "this week",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f)
+                )
             }
         }
     }

@@ -17,6 +17,7 @@ import androidx.core.app.NotificationCompat
 import com.apneaalarm.MainActivity
 import com.apneaalarm.R
 import com.apneaalarm.data.PreferencesRepository
+import com.apneaalarm.data.SessionRecord
 import com.apneaalarm.data.SessionSettings
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -73,6 +74,12 @@ class SessionService : Service() {
     private var pendingGlobalM: Int = 60
     private var pendingSnoozeDuration: Int = 5
     private var pendingSnoozeEnabled: Boolean = true
+
+    // Session tracking for metrics
+    private var sessionStartTime: Long = 0L
+    private var activeSessionSettings: SessionSettings? = null
+    private var activeSessionGlobalM: Int = 60
+    private var sessionRecorded = false
 
     inner class LocalBinder : Binder() {
         fun getService(): SessionService = this@SessionService
@@ -140,6 +147,10 @@ class SessionService : Service() {
     private fun startSession() {
         startForeground(NOTIFICATION_ID, createNotification("Apnea session starting...", false))
 
+        // Reset metrics tracking
+        sessionStartTime = System.currentTimeMillis()
+        sessionRecorded = false
+
         serviceScope.launch {
             val repository = PreferencesRepository(applicationContext)
             val prefs = repository.userPreferences.first()
@@ -182,6 +193,10 @@ class SessionService : Service() {
                 currentAlarmId = -1L
             }
 
+            // Store for metrics recording
+            activeSessionSettings = sessionSettings
+            activeSessionGlobalM = globalM
+
             breathingSession = BreathingSession(
                 context = applicationContext,
                 sessionSettings = sessionSettings,
@@ -195,6 +210,11 @@ class SessionService : Service() {
                         _sessionProgress.value = progress
                         updateNotification(progress)
 
+                        // Record session when it finishes or is stopped
+                        if (progress.state is SessionState.Finishing || progress.state is SessionState.Stopped) {
+                            recordSessionMetrics(progress, repository)
+                        }
+
                         if (progress.state is SessionState.Stopped) {
                             stopSelf()
                         }
@@ -206,7 +226,43 @@ class SessionService : Service() {
         }
     }
 
+    private fun recordSessionMetrics(progress: SessionProgress, repository: PreferencesRepository) {
+        if (sessionRecorded) return
+        sessionRecorded = true
+
+        val settings = activeSessionSettings ?: return
+        val endTime = System.currentTimeMillis()
+        val durationSeconds = ((endTime - sessionStartTime) / 1000).toInt()
+
+        // Only record if session lasted at least 10 seconds
+        if (durationSeconds < 10) return
+
+        // Determine if session was completed (reached Finishing state) or stopped early
+        val wasCompleted = progress.state is SessionState.Finishing
+
+        val record = SessionRecord(
+            timestamp = endTime,
+            durationSeconds = durationSeconds,
+            cyclesCompleted = progress.currentCycle,
+            cyclesPlanned = progress.totalCycles,
+            breathHoldDurationSeconds = settings.breathHoldDurationSeconds(activeSessionGlobalM),
+            trainingMode = settings.trainingMode,
+            wasCompleted = wasCompleted,
+            intensityFactor = settings.intensityFactor(activeSessionGlobalM)
+        )
+
+        serviceScope.launch {
+            try {
+                repository.recordSession(record)
+            } catch (e: Exception) {
+                android.util.Log.e("SessionService", "Failed to record session metrics", e)
+            }
+        }
+    }
+
     fun stopSession() {
+        sessionRecorded = false
+        activeSessionSettings = null
         breathingSession?.stop()
         breathingSession = null
         stopForeground(STOP_FOREGROUND_REMOVE)

@@ -27,6 +27,10 @@ class PreferencesRepository(private val context: Context) {
         val SAVED_SESSIONS_JSON = stringPreferencesKey("saved_sessions_json")
         val LAST_SESSION_JSON = stringPreferencesKey("last_session_json")
 
+        // Metrics
+        val SESSION_HISTORY_JSON = stringPreferencesKey("session_history_json")
+        val LONGEST_STREAK = intPreferencesKey("longest_streak")
+
         // Legacy keys (for migration)
         val ALARM_HOUR = intPreferencesKey("alarm_hour")
         val ALARM_MINUTE = intPreferencesKey("alarm_minute")
@@ -136,6 +140,35 @@ class PreferencesRepository(private val context: Context) {
         sessionSettings = optJSONObject("sessionSettings")?.toSessionSettings() ?: SessionSettings()
     )
 
+    // JSON serialization/deserialization for SessionRecord (metrics)
+    private fun SessionRecord.toJson(): JSONObject = JSONObject().apply {
+        put("id", id)
+        put("timestamp", timestamp)
+        put("durationSeconds", durationSeconds)
+        put("cyclesCompleted", cyclesCompleted)
+        put("cyclesPlanned", cyclesPlanned)
+        put("breathHoldDurationSeconds", breathHoldDurationSeconds)
+        put("trainingMode", trainingMode.name)
+        put("wasCompleted", wasCompleted)
+        put("intensityFactor", intensityFactor)
+    }
+
+    private fun JSONObject.toSessionRecord(): SessionRecord = SessionRecord(
+        id = optLong("id", System.currentTimeMillis()),
+        timestamp = optLong("timestamp", System.currentTimeMillis()),
+        durationSeconds = optInt("durationSeconds", 0),
+        cyclesCompleted = optInt("cyclesCompleted", 0),
+        cyclesPlanned = optInt("cyclesPlanned", 0),
+        breathHoldDurationSeconds = optInt("breathHoldDurationSeconds", 0),
+        trainingMode = try {
+            TrainingMode.valueOf(optString("trainingMode", "RELAXATION"))
+        } catch (e: Exception) {
+            TrainingMode.RELAXATION
+        },
+        wasCompleted = optBoolean("wasCompleted", false),
+        intensityFactor = optInt("intensityFactor", 0)
+    )
+
     // Parse alarms from JSON
     private fun parseAlarms(json: String?): List<Alarm> {
         if (json.isNullOrEmpty()) return emptyList()
@@ -165,6 +198,17 @@ class PreferencesRepository(private val context: Context) {
             JSONObject(json).toSessionSettings()
         } catch (e: Exception) {
             null
+        }
+    }
+
+    // Parse session history from JSON
+    private fun parseSessionHistory(json: String?): List<SessionRecord> {
+        if (json.isNullOrEmpty()) return emptyList()
+        return try {
+            val array = JSONArray(json)
+            (0 until array.length()).map { array.getJSONObject(it).toSessionRecord() }
+        } catch (e: Exception) {
+            emptyList()
         }
     }
 
@@ -413,5 +457,130 @@ class PreferencesRepository(private val context: Context) {
         } catch (e: Exception) {
             null
         }
+    }
+
+    // Session history flow
+    val sessionHistoryFlow: Flow<List<SessionRecord>> = context.dataStore.data.map { preferences ->
+        parseSessionHistory(preferences[PreferencesKeys.SESSION_HISTORY_JSON])
+    }
+
+    // Metrics flow - computed from session history
+    val metricsFlow: Flow<UserMetrics> = context.dataStore.data.map { preferences ->
+        val history = parseSessionHistory(preferences[PreferencesKeys.SESSION_HISTORY_JSON])
+        val longestStreak = preferences[PreferencesKeys.LONGEST_STREAK] ?: 0
+        computeMetrics(history, longestStreak)
+    }
+
+    // Record a completed session
+    suspend fun recordSession(record: SessionRecord) {
+        context.dataStore.edit { preferences ->
+            val existing = parseSessionHistory(preferences[PreferencesKeys.SESSION_HISTORY_JSON]).toMutableList()
+            existing.add(0, record)  // Add at front (most recent first)
+
+            // Keep last 100 sessions to limit storage
+            val trimmed = existing.take(100)
+
+            val jsonArray = JSONArray()
+            trimmed.forEach { jsonArray.put(it.toJson()) }
+            preferences[PreferencesKeys.SESSION_HISTORY_JSON] = jsonArray.toString()
+
+            // Update longest streak if needed
+            val metrics = computeMetrics(trimmed, preferences[PreferencesKeys.LONGEST_STREAK] ?: 0)
+            preferences[PreferencesKeys.LONGEST_STREAK] = metrics.longestStreak
+        }
+    }
+
+    // Compute metrics from session history
+    private fun computeMetrics(history: List<SessionRecord>, storedLongestStreak: Int): UserMetrics {
+        if (history.isEmpty()) return UserMetrics()
+
+        val now = System.currentTimeMillis()
+        val weekAgo = now - 7 * 24 * 60 * 60 * 1000L
+        val monthAgo = now - 30 * 24 * 60 * 60 * 1000L
+
+        val completed = history.filter { it.wasCompleted }
+        val thisWeek = history.filter { it.timestamp >= weekAgo }
+        val thisMonth = history.filter { it.timestamp >= monthAgo }
+
+        // Calculate current streak
+        val currentStreak = calculateCurrentStreak(history)
+        val longestStreak = maxOf(currentStreak, storedLongestStreak)
+
+        // Calculate trends
+        val recent = history.take(10)
+        val older = history.drop(10).take(10)
+        val recentAvg = if (recent.isNotEmpty()) recent.map { it.breathHoldDurationSeconds }.average().toInt() else 0
+        val olderAvg = if (older.isNotEmpty()) older.map { it.breathHoldDurationSeconds }.average().toInt() else 0
+
+        val trend = when {
+            older.isEmpty() -> TrendDirection.STABLE
+            recentAvg > olderAvg * 1.05 -> TrendDirection.IMPROVING
+            recentAvg < olderAvg * 0.95 -> TrendDirection.DECLINING
+            else -> TrendDirection.STABLE
+        }
+
+        return UserMetrics(
+            totalSessions = history.size,
+            totalCompletedSessions = completed.size,
+            totalPracticeTimeSeconds = history.sumOf { it.durationSeconds.toLong() },
+            currentStreak = currentStreak,
+            longestStreak = longestStreak,
+            lastSessionDate = history.firstOrNull()?.timestamp,
+            sessionsThisWeek = thisWeek.size,
+            sessionsThisMonth = thisMonth.size,
+            practiceTimeThisWeekSeconds = thisWeek.sumOf { it.durationSeconds.toLong() },
+            practiceTimeThisMonthSeconds = thisMonth.sumOf { it.durationSeconds.toLong() },
+            completionRate = if (history.isNotEmpty()) completed.size.toFloat() / history.size else 0f,
+            averageSessionDurationSeconds = if (history.isNotEmpty()) history.map { it.durationSeconds }.average().toInt() else 0,
+            averageIntensityFactor = if (history.isNotEmpty()) history.map { it.intensityFactor }.average().toInt() else 0,
+            recentBreathHoldAverage = recentAvg,
+            olderBreathHoldAverage = olderAvg,
+            breathHoldTrend = trend
+        )
+    }
+
+    private fun calculateCurrentStreak(history: List<SessionRecord>): Int {
+        if (history.isEmpty()) return 0
+
+        val calendar = java.util.Calendar.getInstance()
+        val today = calendar.apply {
+            set(java.util.Calendar.HOUR_OF_DAY, 0)
+            set(java.util.Calendar.MINUTE, 0)
+            set(java.util.Calendar.SECOND, 0)
+            set(java.util.Calendar.MILLISECOND, 0)
+        }.timeInMillis
+
+        // Group sessions by day
+        val sessionDays = history.map { record ->
+            calendar.timeInMillis = record.timestamp
+            calendar.apply {
+                set(java.util.Calendar.HOUR_OF_DAY, 0)
+                set(java.util.Calendar.MINUTE, 0)
+                set(java.util.Calendar.SECOND, 0)
+                set(java.util.Calendar.MILLISECOND, 0)
+            }.timeInMillis
+        }.distinct().sorted().reversed()
+
+        if (sessionDays.isEmpty()) return 0
+
+        val mostRecent = sessionDays.first()
+        val dayMs = 24 * 60 * 60 * 1000L
+
+        // Streak is broken if most recent session was more than 1 day ago
+        if (today - mostRecent > dayMs) return 0
+
+        var streak = 1
+        var expectedDay = mostRecent - dayMs
+
+        for (i in 1 until sessionDays.size) {
+            if (sessionDays[i] == expectedDay) {
+                streak++
+                expectedDay -= dayMs
+            } else {
+                break
+            }
+        }
+
+        return streak
     }
 }

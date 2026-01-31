@@ -12,6 +12,7 @@ import com.apneaalarm.data.Alarm
 import com.apneaalarm.data.SavedSession
 import com.apneaalarm.data.SessionSettings
 import com.apneaalarm.data.TrainingMode
+import com.apneaalarm.data.UserMetrics
 import com.apneaalarm.data.UserPreferences
 import com.apneaalarm.session.SessionProgress
 import com.apneaalarm.ui.screens.AlarmEditScreen
@@ -23,6 +24,7 @@ import com.apneaalarm.ui.screens.NewSessionScreen
 import com.apneaalarm.ui.screens.SavedSessionsScreen
 import com.apneaalarm.ui.screens.SessionScreen
 import com.apneaalarm.ui.screens.SettingsScreen
+import com.apneaalarm.ui.screens.StatisticsScreen
 import com.apneaalarm.ui.screens.WelcomeScreen
 import kotlinx.coroutines.flow.StateFlow
 
@@ -35,6 +37,7 @@ sealed class Screen(val route: String) {
     object SavedSessions : Screen("saved_sessions")
     object Help : Screen("help")
     object BreathHoldTest : Screen("breath_hold_test")
+    object Statistics : Screen("statistics")
     object AlarmEdit : Screen("alarm_edit/{alarmId}") {
         fun createRoute(alarmId: Long?) = "alarm_edit/${alarmId ?: -1}"
     }
@@ -52,6 +55,7 @@ fun ApneaNavGraph(
     sessionProgressFlow: StateFlow<SessionProgress>,
     snoozeEnabledFlow: StateFlow<Boolean>,
     snoozeDurationFlow: StateFlow<Int>,
+    metricsFlow: StateFlow<UserMetrics>,
     // Session control
     onStartSessionWithSettings: (SessionSettings) -> Unit,
     onStopSession: () -> Unit,
@@ -83,6 +87,7 @@ fun ApneaNavGraph(
     val sessionProgress by sessionProgressFlow.collectAsState()
     val snoozeEnabled by snoozeEnabledFlow.collectAsState()
     val snoozeDuration by snoozeDurationFlow.collectAsState()
+    val metrics by metricsFlow.collectAsState()
 
     val globalM = preferences.maxStaticBreathHoldDurationSeconds
 
@@ -111,6 +116,7 @@ fun ApneaNavGraph(
             HomeScreen(
                 preferences = preferences,
                 alarms = alarms,
+                metrics = metrics,
                 isSessionActive = sessionProgress.isActive,
                 onNavigateToAlarms = {
                     navController.navigate(Screen.Settings.route)
@@ -132,6 +138,9 @@ fun ApneaNavGraph(
                 },
                 onNavigateToBreathHoldTest = {
                     navController.navigate(Screen.BreathHoldTest.route)
+                },
+                onNavigateToStatistics = {
+                    navController.navigate(Screen.Statistics.route)
                 },
                 onRepeatLastSession = {
                     preferences.lastSessionSettings?.let { settings ->
@@ -156,6 +165,12 @@ fun ApneaNavGraph(
                     onMaxBreathHoldChanged(seconds)
                     navController.popBackStack()
                 }
+            )
+        }
+
+        composable(Screen.Statistics.route) {
+            StatisticsScreen(
+                onNavigateBack = { navController.popBackStack() }
             )
         }
 

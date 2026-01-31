@@ -28,6 +28,7 @@ import com.apneaalarm.data.PreferencesRepository
 import com.apneaalarm.data.SavedSession
 import com.apneaalarm.data.SessionSettings
 import com.apneaalarm.data.TrainingMode
+import com.apneaalarm.data.UserMetrics
 import com.apneaalarm.data.UserPreferences
 import com.apneaalarm.session.SessionProgress
 import com.apneaalarm.session.SessionService
@@ -49,6 +50,7 @@ class MainActivity : ComponentActivity() {
     private val sessionProgressFlow = MutableStateFlow(SessionProgress())
     private val snoozeEnabledFlow = MutableStateFlow(false)
     private val snoozeDurationFlow = MutableStateFlow(5)
+    private val metricsFlow = MutableStateFlow(UserMetrics())
 
     // Cache of alarms for quick access in composable
     private var alarmsCache: List<Alarm> = emptyList()
@@ -126,6 +128,13 @@ class MainActivity : ComponentActivity() {
             }
         }
 
+        // Collect metrics
+        lifecycleScope.launch {
+            preferencesRepository.metricsFlow.collect { metrics ->
+                metricsFlow.value = metrics
+            }
+        }
+
         setContent {
             ApneaAlarmTheme {
                 Surface(
@@ -150,6 +159,7 @@ class MainActivity : ComponentActivity() {
                         sessionProgressFlow = sessionProgressFlow,
                         snoozeEnabledFlow = snoozeEnabledFlow,
                         snoozeDurationFlow = snoozeDurationFlow,
+                        metricsFlow = metricsFlow,
                         onStartSessionWithSettings = { settings ->
                             startSessionWithSettings(settings)
                         },
