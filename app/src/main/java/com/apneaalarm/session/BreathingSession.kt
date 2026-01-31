@@ -3,9 +3,11 @@ package com.apneaalarm.session
 import android.content.Context
 import com.apneaalarm.audio.AudioPlayer
 import com.apneaalarm.data.SessionSettings
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -20,7 +22,12 @@ class BreathingSession(
     private val skipIntro: Boolean = false
 ) {
     private val audioPlayer = AudioPlayer(context)
-    private val scope = CoroutineScope(Dispatchers.Default)
+
+    // Use SupervisorJob so child coroutine failures don't cancel the entire scope
+    private val exceptionHandler = CoroutineExceptionHandler { _, throwable ->
+        android.util.Log.e("BreathingSession", "Coroutine exception", throwable)
+    }
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default + exceptionHandler)
     private var sessionJob: Job? = null
     private var finishingJob: Job? = null
 
