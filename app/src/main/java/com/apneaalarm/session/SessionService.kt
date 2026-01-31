@@ -213,6 +213,16 @@ class SessionService : Service() {
         stopSelf()
     }
 
+    fun pauseSession() {
+        breathingSession?.pause()
+    }
+
+    fun resumeSession() {
+        breathingSession?.resume()
+    }
+
+    val isPaused: Boolean get() = breathingSession?.isPausedState == true
+
     private fun createNotificationChannels() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val sessionChannel = NotificationChannel(
@@ -331,6 +341,7 @@ class SessionService : Service() {
             is SessionState.Finishing -> "Tap to open app and press STOP"
             is SessionState.Stopped -> "Session ended"
             is SessionState.Idle -> "Starting..."
+            is SessionState.Paused -> "PAUSED - Tap to resume"
         }
 
         val notification = createNotification(text, isFinishing)

@@ -162,6 +162,12 @@ class MainActivity : ComponentActivity() {
                         onSnooze = {
                             snoozeAlarm()
                         },
+                        onPauseSession = {
+                            pauseSession()
+                        },
+                        onResumeSession = {
+                            resumeSession()
+                        },
                         onSaveAlarm = { alarm ->
                             handleSaveAlarm(alarm)
                         },
@@ -310,6 +316,14 @@ class MainActivity : ComponentActivity() {
 
     private fun stopSession() {
         sessionService?.stopSession()
+    }
+
+    private fun pauseSession() {
+        sessionService?.pauseSession()
+    }
+
+    private fun resumeSession() {
+        sessionService?.resumeSession()
     }
 
     private fun skipIntroAndStartExercises() {

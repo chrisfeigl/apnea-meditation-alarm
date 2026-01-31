@@ -15,7 +15,9 @@ import com.apneaalarm.data.TrainingMode
 import com.apneaalarm.data.UserPreferences
 import com.apneaalarm.session.SessionProgress
 import com.apneaalarm.ui.screens.AlarmEditScreen
+import com.apneaalarm.ui.screens.BreathHoldTestScreen
 import com.apneaalarm.ui.screens.EditSavedSessionScreen
+import com.apneaalarm.ui.screens.HelpScreen
 import com.apneaalarm.ui.screens.HomeScreen
 import com.apneaalarm.ui.screens.NewSessionScreen
 import com.apneaalarm.ui.screens.SavedSessionsScreen
@@ -31,6 +33,8 @@ sealed class Screen(val route: String) {
     object Settings : Screen("settings")
     object NewSession : Screen("new_session")
     object SavedSessions : Screen("saved_sessions")
+    object Help : Screen("help")
+    object BreathHoldTest : Screen("breath_hold_test")
     object AlarmEdit : Screen("alarm_edit/{alarmId}") {
         fun createRoute(alarmId: Long?) = "alarm_edit/${alarmId ?: -1}"
     }
@@ -53,6 +57,8 @@ fun ApneaNavGraph(
     onStopSession: () -> Unit,
     onSkipIntro: () -> Unit,
     onSnooze: () -> Unit,
+    onPauseSession: () -> Unit,
+    onResumeSession: () -> Unit,
     // Alarm management
     onSaveAlarm: (Alarm) -> Unit,
     onDeleteAlarm: (Long) -> Unit,
@@ -106,7 +112,7 @@ fun ApneaNavGraph(
                 preferences = preferences,
                 alarms = alarms,
                 isSessionActive = sessionProgress.isActive,
-                onNavigateToSettings = {
+                onNavigateToAlarms = {
                     navController.navigate(Screen.Settings.route)
                 },
                 onNavigateToSession = {
@@ -121,11 +127,34 @@ fun ApneaNavGraph(
                 onNavigateToAlarmEdit = { alarmId ->
                     navController.navigate(Screen.AlarmEdit.createRoute(alarmId))
                 },
+                onNavigateToHelp = {
+                    navController.navigate(Screen.Help.route)
+                },
+                onNavigateToBreathHoldTest = {
+                    navController.navigate(Screen.BreathHoldTest.route)
+                },
                 onRepeatLastSession = {
                     preferences.lastSessionSettings?.let { settings ->
                         onStartSessionWithSettings(settings)
                         navController.navigate(Screen.Session.route)
                     }
+                }
+            )
+        }
+
+        composable(Screen.Help.route) {
+            HelpScreen(
+                onNavigateBack = { navController.popBackStack() }
+            )
+        }
+
+        composable(Screen.BreathHoldTest.route) {
+            BreathHoldTestScreen(
+                currentValue = globalM,
+                onNavigateBack = { navController.popBackStack() },
+                onSave = { seconds ->
+                    onMaxBreathHoldChanged(seconds)
+                    navController.popBackStack()
                 }
             )
         }
@@ -151,6 +180,8 @@ fun ApneaNavGraph(
                         popUpTo(Screen.Session.route) { inclusive = true }
                     }
                 },
+                onPause = onPauseSession,
+                onResume = onResumeSession,
                 snoozeDurationMinutes = snoozeDuration,
                 snoozeEnabled = snoozeEnabled
             )
@@ -164,8 +195,7 @@ fun ApneaNavGraph(
                 onNavigateToAlarmEdit = { alarmId ->
                     navController.navigate(Screen.AlarmEdit.createRoute(alarmId))
                 },
-                onAlarmEnabledChanged = onAlarmEnabledChanged,
-                onMaxBreathHoldChanged = onMaxBreathHoldChanged
+                onAlarmEnabledChanged = onAlarmEnabledChanged
             )
         }
 

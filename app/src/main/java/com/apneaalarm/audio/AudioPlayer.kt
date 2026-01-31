@@ -28,6 +28,10 @@ class AudioPlayer(private val context: Context) {
     private var previewPlayer: MediaPlayer? = null
     private var previewJob: Job? = null
 
+    // Pause state for continuous/looping audio
+    private var isPausedState = false
+    private var pausedPosition: Int = 0
+
     // Get resource ID by name (returns 0 if not found)
     private fun getRawResourceId(name: String): Int {
         val resId = context.resources.getIdentifier(name, "raw", context.packageName)
@@ -145,15 +149,17 @@ class AudioPlayer(private val context: Context) {
         volumeMultiplier: Int,
         customSoundUri: String? = null,
         fadeIn: Boolean = true,
+        isPausedCheck: () -> Boolean = { false },
+        onPauseWait: suspend () -> Unit = {},
         onProgress: (elapsedSeconds: Int) -> Unit = {}
     ) {
         val maxVolume = calculateVolume(volumeMultiplier)
 
         if (customSoundUri != null) {
-            playCustomIntroBowl(customSoundUri, maxVolume, fadeIn, onProgress)
+            playCustomIntroBowl(customSoundUri, maxVolume, fadeIn, isPausedCheck, onPauseWait, onProgress)
         } else if (hasRawResource("bowl")) {
             // Use bundled bowl sound
-            playBundledIntroBowl("bowl", maxVolume, fadeIn, onProgress)
+            playBundledIntroBowl("bowl", maxVolume, fadeIn, isPausedCheck, onPauseWait, onProgress)
         } else {
             soundGenerator.playIntroBowlSequence(maxVolume, onProgress)
         }
@@ -163,6 +169,8 @@ class AudioPlayer(private val context: Context) {
         resourceName: String,
         maxVolume: Float,
         fadeIn: Boolean,
+        isPausedCheck: () -> Boolean,
+        onPauseWait: suspend () -> Unit,
         onProgress: (elapsedSeconds: Int) -> Unit
     ) {
         try {
@@ -178,26 +186,37 @@ class AudioPlayer(private val context: Context) {
                     // Fade in over 48 seconds with accelerated curve (sqrt)
                     // Reaches ~50% volume at 25% time, ~71% at 50% time
                     for (elapsed in 0 until 48) {
+                        onPauseWait()
                         if (!scope.isActive) break
                         val progress = elapsed / 48.0
                         val volume = (kotlin.math.sqrt(progress) * maxVolume).toFloat()
-                        player.setVolume(volume, volume)
+                        if (!isPausedCheck()) {
+                            player.setVolume(volume, volume)
+                        }
                         onProgress(elapsed)
                         delay(1000)
                     }
 
                     // Hold at max for 3 seconds
-                    player.setVolume(maxVolume, maxVolume)
+                    if (!isPausedCheck()) {
+                        player.setVolume(maxVolume, maxVolume)
+                    }
                     for (elapsed in 48 until 51) {
+                        onPauseWait()
+                        if (!scope.isActive) break
                         onProgress(elapsed)
                         delay(1000)
                     }
 
                     // Fade out over 3 seconds
                     for (elapsed in 51 until 54) {
+                        onPauseWait()
+                        if (!scope.isActive) break
                         val fadeProgress = (elapsed - 51) / 3.0f
                         val volume = maxVolume * (1.0f - fadeProgress)
-                        player.setVolume(volume, volume)
+                        if (!isPausedCheck()) {
+                            player.setVolume(volume, volume)
+                        }
                         onProgress(elapsed)
                         delay(1000)
                     }
@@ -207,6 +226,7 @@ class AudioPlayer(private val context: Context) {
                     player.start()
 
                     for (elapsed in 0 until 54) {
+                        onPauseWait()
                         if (!scope.isActive) break
                         onProgress(elapsed)
                         delay(1000)
@@ -227,6 +247,8 @@ class AudioPlayer(private val context: Context) {
         uri: String,
         maxVolume: Float,
         fadeIn: Boolean,
+        isPausedCheck: () -> Boolean,
+        onPauseWait: suspend () -> Unit,
         onProgress: (elapsedSeconds: Int) -> Unit
     ) {
         try {
@@ -247,26 +269,37 @@ class AudioPlayer(private val context: Context) {
                     // Fade in over 48 seconds with accelerated curve (sqrt)
                     // Reaches ~50% volume at 25% time, ~71% at 50% time
                     for (elapsed in 0 until 48) {
+                        onPauseWait()
                         if (!scope.isActive) break
                         val progress = elapsed / 48.0
                         val volume = (kotlin.math.sqrt(progress) * maxVolume).toFloat()
-                        player.setVolume(volume, volume)
+                        if (!isPausedCheck()) {
+                            player.setVolume(volume, volume)
+                        }
                         onProgress(elapsed)
                         delay(1000)
                     }
 
                     // Hold at max for 3 seconds
-                    player.setVolume(maxVolume, maxVolume)
+                    if (!isPausedCheck()) {
+                        player.setVolume(maxVolume, maxVolume)
+                    }
                     for (elapsed in 48 until 51) {
+                        onPauseWait()
+                        if (!scope.isActive) break
                         onProgress(elapsed)
                         delay(1000)
                     }
 
                     // Fade out over 3 seconds
                     for (elapsed in 51 until 54) {
+                        onPauseWait()
+                        if (!scope.isActive) break
                         val fadeProgress = (elapsed - 51) / 3.0f
                         val volume = maxVolume * (1.0f - fadeProgress)
-                        player.setVolume(volume, volume)
+                        if (!isPausedCheck()) {
+                            player.setVolume(volume, volume)
+                        }
                         onProgress(elapsed)
                         delay(1000)
                     }
@@ -276,6 +309,7 @@ class AudioPlayer(private val context: Context) {
                     player.start()
 
                     for (elapsed in 0 until 54) {
+                        onPauseWait()
                         if (!scope.isActive) break
                         onProgress(elapsed)
                         delay(1000)
@@ -657,9 +691,46 @@ class AudioPlayer(private val context: Context) {
         }
     }
 
+    /**
+     * Pause all currently playing audio
+     */
+    fun pauseAudio() {
+        isPausedState = true
+        try {
+            customIntroBowlPlayer?.let { player ->
+                if (player.isPlaying) {
+                    pausedPosition = player.currentPosition
+                    player.pause()
+                }
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("AudioPlayer", "Error pausing audio", e)
+        }
+        // Stop continuous bowl when pausing
+        continuousPlayJob?.cancel()
+        continuousPlayJob = null
+    }
+
+    /**
+     * Resume paused audio
+     */
+    fun resumeAudio() {
+        isPausedState = false
+        try {
+            customIntroBowlPlayer?.let { player ->
+                player.seekTo(pausedPosition)
+                player.start()
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("AudioPlayer", "Error resuming audio", e)
+        }
+    }
+
     fun release() {
         stopContinuousBowl()
         stopPreview()
+        isPausedState = false
+        pausedPosition = 0
         customIntroBowlPlayer?.release()
         customBreathChimePlayer?.release()
         customHoldChimePlayer?.release()

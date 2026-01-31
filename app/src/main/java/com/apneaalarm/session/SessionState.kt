@@ -46,6 +46,11 @@ sealed class SessionState {
 
     // Session stopped
     object Stopped : SessionState()
+
+    // Session paused - wraps the state that was active when paused
+    data class Paused(
+        val previousState: SessionState
+    ) : SessionState()
 }
 
 data class SessionProgress(

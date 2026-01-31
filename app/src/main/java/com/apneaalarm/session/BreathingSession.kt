@@ -29,6 +29,10 @@ class BreathingSession(
 
     private var totalElapsedSeconds = 0
 
+    // Pause state
+    private var isPaused = false
+    private var stateBeforePause: SessionState? = null
+
     // Cached computed values from sessionSettings
     private val numberOfIntervals = sessionSettings.numberOfIntervals()
     private val breathHoldDuration = sessionSettings.breathHoldDurationSeconds(globalM)
@@ -46,9 +50,43 @@ class BreathingSession(
         sessionJob = null
         finishingJob?.cancel()
         finishingJob = null
+        isPaused = false
+        stateBeforePause = null
         audioPlayer.stopContinuousBowl()
         audioPlayer.release()
         _progress.value = SessionProgress(state = SessionState.Stopped, isActive = false)
+    }
+
+    fun pause() {
+        if (isPaused) return
+        val currentState = _progress.value.state
+        // Don't pause if already stopped or idle
+        if (currentState is SessionState.Stopped || currentState is SessionState.Idle) return
+
+        isPaused = true
+        stateBeforePause = currentState
+        audioPlayer.pauseAudio()
+        _progress.value = _progress.value.copy(
+            state = SessionState.Paused(currentState)
+        )
+    }
+
+    fun resume() {
+        if (!isPaused) return
+        val previousState = stateBeforePause ?: return
+
+        isPaused = false
+        audioPlayer.resumeAudio()
+        _progress.value = _progress.value.copy(state = previousState)
+        stateBeforePause = null
+    }
+
+    val isPausedState: Boolean get() = isPaused
+
+    private suspend fun waitWhilePaused() {
+        while (isPaused && scope.isActive) {
+            delay(100)
+        }
     }
 
     private suspend fun runSession() {
@@ -102,7 +140,9 @@ class BreathingSession(
         audioPlayer.playIntroBowl(
             volumeMultiplier = sessionSettings.introBowlVolumeMultiplier,
             customSoundUri = sessionSettings.customIntroBowlUri,
-            fadeIn = sessionSettings.fadeInIntroBowl
+            fadeIn = sessionSettings.fadeInIntroBowl,
+            isPausedCheck = { isPaused },
+            onPauseWait = { waitWhilePaused() }
         ) { elapsedSeconds ->
             totalElapsedSeconds = elapsedSeconds
 
@@ -124,12 +164,17 @@ class BreathingSession(
     private suspend fun playPreHoldCountdown() {
         // Visual countdown 3-2-1-0 with single hold chime at the end
         for (countdown in 3 downTo 1) {
+            waitWhilePaused()
+            if (!scope.isActive) return
             _progress.value = _progress.value.copy(
                 state = SessionState.PreHoldCountdown(countdown),
                 totalElapsedSeconds = 57 + (3 - countdown)
             )
             delay(1000)
         }
+
+        waitWhilePaused()
+        if (!scope.isActive) return
 
         // At 0, play the hold chime to signal start of first hold
         _progress.value = _progress.value.copy(
@@ -157,6 +202,7 @@ class BreathingSession(
         }
 
         for (elapsed in 0 until breathHoldDuration) {
+            waitWhilePaused()
             if (!scope.isActive) return
 
             val remaining = breathHoldDuration - elapsed
@@ -194,6 +240,7 @@ class BreathingSession(
         val breathingDuration = sessionSettings.breathingIntervalDuration(cycleIndex, globalM)
 
         for (elapsed in 0 until breathingDuration) {
+            waitWhilePaused()
             if (!scope.isActive) return
 
             val remaining = breathingDuration - elapsed
@@ -238,6 +285,10 @@ class BreathingSession(
         finishingJob = scope.launch {
             val threeMinutes = 180  // 3 minutes in seconds
             for (elapsed in 0 until threeMinutes) {
+                // Check for pause during finishing
+                while (isPaused && isActive) {
+                    delay(100)
+                }
                 if (!isActive) return@launch
                 delay(1000)
                 _progress.value = _progress.value.copy(
@@ -253,6 +304,11 @@ class BreathingSession(
             // Continue tracking time in chime phase
             var chimeElapsed = 0
             while (isActive) {
+                // Check for pause during finishing
+                while (isPaused && isActive) {
+                    delay(100)
+                }
+                if (!isActive) return@launch
                 delay(1000)
                 chimeElapsed++
                 _progress.value = _progress.value.copy(
