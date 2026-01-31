@@ -1,6 +1,7 @@
 package com.apneaalarm.session
 
 import android.content.Context
+import android.os.SystemClock
 import com.apneaalarm.audio.AudioPlayer
 import com.apneaalarm.data.SessionSettings
 import kotlinx.coroutines.CoroutineExceptionHandler
@@ -170,28 +171,41 @@ class BreathingSession(
 
     private suspend fun playPreHoldCountdown() {
         // Visual countdown 3-2-1-0 with single hold chime at the end
-        for (countdown in 3 downTo 1) {
-            waitWhilePaused()
+        val startTime = SystemClock.elapsedRealtime()
+        var pausedDuration = 0L
+        var lastCountdown = 4 // Start higher so first update triggers
+
+        while (scope.isActive) {
+            if (isPaused) {
+                val pauseStart = SystemClock.elapsedRealtime()
+                waitWhilePaused()
+                pausedDuration += SystemClock.elapsedRealtime() - pauseStart
+            }
             if (!scope.isActive) return
-            _progress.value = _progress.value.copy(
-                state = SessionState.PreHoldCountdown(countdown),
-                totalElapsedSeconds = 57 + (3 - countdown)
-            )
-            delay(1000)
+
+            val elapsedMs = SystemClock.elapsedRealtime() - startTime - pausedDuration
+            val countdown = 3 - (elapsedMs / 1000).toInt()
+
+            if (countdown < 0) break
+
+            if (countdown != lastCountdown) {
+                lastCountdown = countdown
+                _progress.value = _progress.value.copy(
+                    state = SessionState.PreHoldCountdown(countdown),
+                    totalElapsedSeconds = 57 + (3 - countdown)
+                )
+
+                // At 0, play the hold chime to signal start of first hold
+                if (countdown == 0) {
+                    audioPlayer.playHoldChime(
+                        sessionSettings.holdChimeVolumeMultiplier,
+                        sessionSettings.customHoldChimeUri
+                    )
+                }
+            }
+
+            delay(100)
         }
-
-        waitWhilePaused()
-        if (!scope.isActive) return
-
-        // At 0, play the hold chime to signal start of first hold
-        _progress.value = _progress.value.copy(
-            state = SessionState.PreHoldCountdown(0),
-            totalElapsedSeconds = 60
-        )
-        audioPlayer.playHoldChime(
-            sessionSettings.holdChimeVolumeMultiplier,
-            sessionSettings.customHoldChimeUri
-        )
 
         totalElapsedSeconds = 60
     }
@@ -208,28 +222,44 @@ class BreathingSession(
             }
         }
 
-        for (elapsed in 0 until breathHoldDuration) {
-            waitWhilePaused()
+        val startTime = SystemClock.elapsedRealtime()
+        var pausedDuration = 0L
+        var lastElapsed = -1
+
+        while (scope.isActive) {
+            if (isPaused) {
+                val pauseStart = SystemClock.elapsedRealtime()
+                waitWhilePaused()
+                pausedDuration += SystemClock.elapsedRealtime() - pauseStart
+            }
             if (!scope.isActive) return
 
-            val remaining = breathHoldDuration - elapsed
-            val isCountdown = remaining <= 3
+            val elapsed = ((SystemClock.elapsedRealtime() - startTime - pausedDuration) / 1000).toInt()
 
-            _progress.value = SessionProgress(
-                state = SessionState.Holding(
-                    cycleIndex = cycleIndex,
+            if (elapsed >= breathHoldDuration) break
+
+            // Only update UI when elapsed second changes
+            if (elapsed != lastElapsed) {
+                lastElapsed = elapsed
+                val remaining = breathHoldDuration - elapsed
+                val isCountdown = remaining <= 3
+
+                _progress.value = SessionProgress(
+                    state = SessionState.Holding(
+                        cycleIndex = cycleIndex,
+                        totalCycles = numberOfIntervals,
+                        elapsedSeconds = elapsed,
+                        targetSeconds = breathHoldDuration,
+                        isCountdown = isCountdown
+                    ),
+                    currentCycle = cycleIndex,
                     totalCycles = numberOfIntervals,
-                    elapsedSeconds = elapsed,
-                    targetSeconds = breathHoldDuration,
-                    isCountdown = isCountdown
-                ),
-                currentCycle = cycleIndex,
-                totalCycles = numberOfIntervals,
-                totalElapsedSeconds = totalElapsedSeconds + elapsed,
-                isActive = true
-            )
+                    totalElapsedSeconds = totalElapsedSeconds + elapsed,
+                    isActive = true
+                )
+            }
 
-            delay(1000)
+            delay(100) // Check more frequently for responsive UI
         }
 
         totalElapsedSeconds += breathHoldDuration
@@ -245,29 +275,44 @@ class BreathingSession(
         }
 
         val breathingDuration = sessionSettings.breathingIntervalDuration(cycleIndex, globalM)
+        val startTime = SystemClock.elapsedRealtime()
+        var pausedDuration = 0L
+        var lastElapsed = -1
 
-        for (elapsed in 0 until breathingDuration) {
-            waitWhilePaused()
+        while (scope.isActive) {
+            if (isPaused) {
+                val pauseStart = SystemClock.elapsedRealtime()
+                waitWhilePaused()
+                pausedDuration += SystemClock.elapsedRealtime() - pauseStart
+            }
             if (!scope.isActive) return
 
-            val remaining = breathingDuration - elapsed
-            val isCountdown = remaining <= 3
+            val elapsed = ((SystemClock.elapsedRealtime() - startTime - pausedDuration) / 1000).toInt()
 
-            _progress.value = SessionProgress(
-                state = SessionState.Breathing(
-                    cycleIndex = cycleIndex,
+            if (elapsed >= breathingDuration) break
+
+            // Only update UI when elapsed second changes
+            if (elapsed != lastElapsed) {
+                lastElapsed = elapsed
+                val remaining = breathingDuration - elapsed
+                val isCountdown = remaining <= 3
+
+                _progress.value = SessionProgress(
+                    state = SessionState.Breathing(
+                        cycleIndex = cycleIndex,
+                        totalCycles = numberOfIntervals,
+                        elapsedSeconds = elapsed,
+                        targetSeconds = breathingDuration,
+                        isCountdown = isCountdown
+                    ),
+                    currentCycle = cycleIndex,
                     totalCycles = numberOfIntervals,
-                    elapsedSeconds = elapsed,
-                    targetSeconds = breathingDuration,
-                    isCountdown = isCountdown
-                ),
-                currentCycle = cycleIndex,
-                totalCycles = numberOfIntervals,
-                totalElapsedSeconds = totalElapsedSeconds + elapsed,
-                isActive = true
-            )
+                    totalElapsedSeconds = totalElapsedSeconds + elapsed,
+                    isActive = true
+                )
+            }
 
-            delay(1000)
+            delay(100) // Check more frequently for responsive UI
         }
 
         totalElapsedSeconds += breathingDuration
@@ -291,37 +336,38 @@ class BreathingSession(
         // Start a timer for 3 minutes, then switch to chimes
         finishingJob = scope.launch {
             val threeMinutes = 180  // 3 minutes in seconds
-            for (elapsed in 0 until threeMinutes) {
-                // Check for pause during finishing
-                while (isPaused && isActive) {
-                    delay(100)
-                }
-                if (!isActive) return@launch
-                delay(1000)
-                _progress.value = _progress.value.copy(
-                    state = SessionState.Finishing(elapsedSeconds = elapsed + 1, isChimePhase = false),
-                    totalElapsedSeconds = totalElapsedSeconds + elapsed + 1
-                )
-            }
+            val startTime = SystemClock.elapsedRealtime()
+            var pausedDuration = 0L
+            var lastElapsed = -1
+            var switchedToChimes = false
 
-            // After 3 minutes, switch to repeated hold chimes at max volume
-            if (!isActive) return@launch
-            audioPlayer.startContinuousHoldChime(sessionSettings.customHoldChimeUri)
-
-            // Continue tracking time in chime phase
-            var chimeElapsed = 0
             while (isActive) {
-                // Check for pause during finishing
-                while (isPaused && isActive) {
-                    delay(100)
+                if (isPaused) {
+                    val pauseStart = SystemClock.elapsedRealtime()
+                    while (isPaused && isActive) {
+                        delay(100)
+                    }
+                    pausedDuration += SystemClock.elapsedRealtime() - pauseStart
                 }
                 if (!isActive) return@launch
-                delay(1000)
-                chimeElapsed++
-                _progress.value = _progress.value.copy(
-                    state = SessionState.Finishing(elapsedSeconds = threeMinutes + chimeElapsed, isChimePhase = true),
-                    totalElapsedSeconds = totalElapsedSeconds + threeMinutes + chimeElapsed
-                )
+
+                val elapsed = ((SystemClock.elapsedRealtime() - startTime - pausedDuration) / 1000).toInt()
+
+                // Switch to chimes after 3 minutes
+                if (elapsed >= threeMinutes && !switchedToChimes) {
+                    switchedToChimes = true
+                    audioPlayer.startContinuousHoldChime(sessionSettings.customHoldChimeUri)
+                }
+
+                if (elapsed != lastElapsed) {
+                    lastElapsed = elapsed
+                    _progress.value = _progress.value.copy(
+                        state = SessionState.Finishing(elapsedSeconds = elapsed, isChimePhase = switchedToChimes),
+                        totalElapsedSeconds = totalElapsedSeconds + elapsed
+                    )
+                }
+
+                delay(100)
             }
         }
     }
