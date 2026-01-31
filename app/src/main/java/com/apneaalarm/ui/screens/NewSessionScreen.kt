@@ -44,6 +44,8 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.apneaalarm.R
 import com.apneaalarm.data.IntensityLevel
+import com.apneaalarm.ui.components.HelpContent
+import com.apneaalarm.ui.components.HelpDialog
 import com.apneaalarm.data.SessionSettings
 import com.apneaalarm.data.TrainingMode
 
@@ -59,6 +61,7 @@ fun NewSessionScreen(
     var settings by remember { mutableStateOf(initialSettings) }
     var showSaveDialog by remember { mutableStateOf(false) }
     var showAudioFilesDialog by remember { mutableStateOf(false) }
+    var showHelpDialog by remember { mutableStateOf(false) }
     var sessionName by remember { mutableStateOf("") }
 
     Scaffold(
@@ -71,6 +74,9 @@ fun NewSessionScreen(
                     }
                 },
                 actions = {
+                    TextButton(onClick = { showHelpDialog = true }) {
+                        Text("?")
+                    }
                     TextButton(onClick = { showSaveDialog = true }) {
                         Text("Save")
                     }
@@ -195,6 +201,15 @@ fun NewSessionScreen(
             settings = settings,
             onSettingsChanged = { settings = it },
             onDismiss = { showAudioFilesDialog = false }
+        )
+    }
+
+    // Help Dialog
+    if (showHelpDialog) {
+        HelpDialog(
+            title = "New Session",
+            content = HelpContent.newSession,
+            onDismiss = { showHelpDialog = false }
         )
     }
 }

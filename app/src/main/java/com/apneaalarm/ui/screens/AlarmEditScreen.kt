@@ -45,6 +45,8 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.apneaalarm.R
 import com.apneaalarm.data.Alarm
+import com.apneaalarm.ui.components.HelpContent
+import com.apneaalarm.ui.components.HelpDialog
 import com.apneaalarm.data.IntensityLevel
 import com.apneaalarm.data.SessionSettings
 import com.apneaalarm.data.TrainingMode
@@ -69,6 +71,7 @@ fun AlarmEditScreen(
     }
     var showTimePicker by remember { mutableStateOf(false) }
     var showAudioFilesDialog by remember { mutableStateOf(false) }
+    var showHelpDialog by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -80,6 +83,9 @@ fun AlarmEditScreen(
                     }
                 },
                 actions = {
+                    TextButton(onClick = { showHelpDialog = true }) {
+                        Text("?")
+                    }
                     TextButton(onClick = { onSaveAlarm(currentAlarm) }) {
                         Text("Save")
                     }
@@ -213,6 +219,15 @@ fun AlarmEditScreen(
             settings = currentAlarm.sessionSettings,
             onSettingsChanged = { currentAlarm = currentAlarm.copy(sessionSettings = it) },
             onDismiss = { showAudioFilesDialog = false }
+        )
+    }
+
+    // Help Dialog
+    if (showHelpDialog) {
+        HelpDialog(
+            title = "Alarm Settings",
+            content = HelpContent.alarmEdit,
+            onDismiss = { showHelpDialog = false }
         )
     }
 }

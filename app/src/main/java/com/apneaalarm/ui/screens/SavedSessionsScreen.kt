@@ -34,6 +34,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.apneaalarm.data.IntensityLevel
 import com.apneaalarm.data.SavedSession
+import com.apneaalarm.ui.components.HelpContent
+import com.apneaalarm.ui.components.HelpDialog
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -45,6 +47,8 @@ fun SavedSessionsScreen(
     onEditSession: (SavedSession) -> Unit,
     onDeleteSession: (Long) -> Unit
 ) {
+    var showHelpDialog by remember { mutableStateOf(false) }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -52,6 +56,11 @@ fun SavedSessionsScreen(
                 navigationIcon = {
                     TextButton(onClick = onNavigateBack) {
                         Text("\u2190 Back")
+                    }
+                },
+                actions = {
+                    TextButton(onClick = { showHelpDialog = true }) {
+                        Text("?")
                     }
                 }
             )
@@ -101,6 +110,15 @@ fun SavedSessionsScreen(
                 item { Spacer(modifier = Modifier.height(16.dp)) }
             }
         }
+    }
+
+    // Help Dialog
+    if (showHelpDialog) {
+        HelpDialog(
+            title = "Saved Sessions",
+            content = HelpContent.savedSessions,
+            onDismiss = { showHelpDialog = false }
+        )
     }
 }
 

@@ -47,6 +47,8 @@ import com.apneaalarm.data.IntensityLevel
 import com.apneaalarm.data.SavedSession
 import com.apneaalarm.data.SessionSettings
 import com.apneaalarm.data.TrainingMode
+import com.apneaalarm.ui.components.HelpContent
+import com.apneaalarm.ui.components.HelpDialog
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -62,6 +64,7 @@ fun EditSavedSessionScreen(
     var settings by remember { mutableStateOf(savedSession.sessionSettings) }
     var showRenameDialog by remember { mutableStateOf(false) }
     var showAudioFilesDialog by remember { mutableStateOf(false) }
+    var showHelpDialog by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -73,6 +76,9 @@ fun EditSavedSessionScreen(
                     }
                 },
                 actions = {
+                    TextButton(onClick = { showHelpDialog = true }) {
+                        Text("?")
+                    }
                     TextButton(onClick = {
                         onSaveSession(savedSession.copy(name = sessionName, sessionSettings = settings))
                     }) {
@@ -246,6 +252,15 @@ fun EditSavedSessionScreen(
             settings = settings,
             onSettingsChanged = { settings = it },
             onDismiss = { showAudioFilesDialog = false }
+        )
+    }
+
+    // Help Dialog
+    if (showHelpDialog) {
+        HelpDialog(
+            title = "Edit Saved Session",
+            content = HelpContent.editSavedSession,
+            onDismiss = { showHelpDialog = false }
         )
     }
 }

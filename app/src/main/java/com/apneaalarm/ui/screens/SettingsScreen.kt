@@ -11,13 +11,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -31,11 +29,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.apneaalarm.data.Alarm
 import com.apneaalarm.data.IntensityLevel
 import com.apneaalarm.data.UserPreferences
+import com.apneaalarm.ui.components.HelpContent
+import com.apneaalarm.ui.components.HelpDialog
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -44,18 +43,23 @@ fun SettingsScreen(
     alarms: List<Alarm>,
     onNavigateBack: () -> Unit,
     onNavigateToAlarmEdit: (Long?) -> Unit,
-    onAlarmEnabledChanged: (Long, Boolean) -> Unit,
-    onMaxBreathHoldChanged: (Int) -> Unit
+    onAlarmEnabledChanged: (Long, Boolean) -> Unit
 ) {
     val globalM = preferences.maxStaticBreathHoldDurationSeconds
+    var showHelpDialog by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Settings") },
+                title = { Text("Alarms") },
                 navigationIcon = {
                     TextButton(onClick = onNavigateBack) {
                         Text("\u2190 Back")
+                    }
+                },
+                actions = {
+                    TextButton(onClick = { showHelpDialog = true }) {
+                        Text("?")
                     }
                 }
             )
@@ -69,14 +73,6 @@ fun SettingsScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             item { Spacer(modifier = Modifier.height(8.dp)) }
-
-            // Global M Setting
-            item {
-                GlobalMCard(
-                    currentValue = globalM,
-                    onValueChanged = onMaxBreathHoldChanged
-                )
-            }
 
             // Alarms Section Header
             item {
@@ -138,70 +134,14 @@ fun SettingsScreen(
             item { Spacer(modifier = Modifier.height(24.dp)) }
         }
     }
-}
 
-@Composable
-private fun GlobalMCard(
-    currentValue: Int,
-    onValueChanged: (Int) -> Unit
-) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant
+    // Help Dialog
+    if (showHelpDialog) {
+        HelpDialog(
+            title = "Alarms",
+            content = HelpContent.settings,
+            onDismiss = { showHelpDialog = false }
         )
-    ) {
-        Column(
-            modifier = Modifier.padding(16.dp)
-        ) {
-            Text(
-                text = "Maximum Breath Hold (M)",
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            Text(
-                text = "Your personal max static breath hold duration. Used to calculate session intensity.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-            )
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            var maxBreathHoldText by remember(currentValue) {
-                mutableStateOf(currentValue.toString())
-            }
-
-            Row(
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                OutlinedTextField(
-                    value = maxBreathHoldText,
-                    onValueChange = { newValue ->
-                        maxBreathHoldText = newValue
-                        newValue.toIntOrNull()?.let { seconds ->
-                            if (seconds in 10..600) {
-                                onValueChanged(seconds)
-                            }
-                        }
-                    },
-                    modifier = Modifier.width(100.dp),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    singleLine = true,
-                    suffix = { Text("s") }
-                )
-
-                Spacer(modifier = Modifier.width(12.dp))
-
-                Text(
-                    text = formatTime(currentValue),
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        }
     }
 }
 
@@ -318,16 +258,4 @@ private fun formatDays(days: Set<Int>): String {
 
     val dayNames = listOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
     return days.sorted().joinToString(", ") { dayNames[it - 1] }
-}
-
-private fun formatTime(totalSeconds: Int): String {
-    val minutes = totalSeconds / 60
-    val seconds = totalSeconds % 60
-    return if (minutes > 0 && seconds > 0) {
-        "${minutes}m ${seconds}s"
-    } else if (minutes > 0) {
-        "${minutes}m"
-    } else {
-        "${seconds}s"
-    }
 }
