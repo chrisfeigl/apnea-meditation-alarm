@@ -106,8 +106,18 @@ class SessionService : Service() {
                 startSession()
             }
             ACTION_STOP_SESSION -> stopSession()
+            else -> {
+                // Service was restarted by system without a valid intent
+                // If no session is active, stop the service to avoid zombie state
+                if (breathingSession == null) {
+                    stopSelf()
+                    return START_NOT_STICKY
+                }
+            }
         }
-        return START_STICKY
+        // Use START_NOT_STICKY - if the system kills us, don't restart
+        // since we can't restore the session state
+        return START_NOT_STICKY
     }
 
     override fun onDestroy() {

@@ -32,7 +32,8 @@
             android:exported="true"
             android:theme="@style/Theme.ApneaAlarm"
             android:showWhenLocked="true"
-            android:turnScreenOn="true">
+            android:turnScreenOn="true"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />

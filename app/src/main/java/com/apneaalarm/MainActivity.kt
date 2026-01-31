@@ -59,6 +59,7 @@ class MainActivity : ComponentActivity() {
 
     private var sessionService: SessionService? = null
     private var serviceBound by mutableStateOf(false)
+    private var sessionCollectionJob: kotlinx.coroutines.Job? = null
 
     private val serviceConnection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
@@ -66,13 +67,17 @@ class MainActivity : ComponentActivity() {
             sessionService = binder.getService()
             serviceBound = true
 
-            // Update snooze state from service
+            // Immediately sync current state from service
             sessionService?.let { svc ->
                 snoozeEnabledFlow.value = svc.snoozeEnabled
                 snoozeDurationFlow.value = svc.snoozeDuration
+                // Immediately set current session progress to avoid showing stale state
+                sessionProgressFlow.value = svc.sessionProgress.value
             }
 
-            lifecycleScope.launch {
+            // Cancel any previous collection job
+            sessionCollectionJob?.cancel()
+            sessionCollectionJob = lifecycleScope.launch {
                 sessionService?.sessionProgress?.collect { progress ->
                     sessionProgressFlow.value = progress
                     // Update snooze state whenever session progress updates
@@ -86,6 +91,8 @@ class MainActivity : ComponentActivity() {
         }
 
         override fun onServiceDisconnected(name: ComponentName?) {
+            sessionCollectionJob?.cancel()
+            sessionCollectionJob = null
             sessionService = null
             serviceBound = false
         }
@@ -134,6 +141,9 @@ class MainActivity : ComponentActivity() {
                 metricsFlow.value = metrics
             }
         }
+
+        // Bind to session service - keep binding for entire activity lifecycle
+        bindToSessionService()
 
         setContent {
             ApneaAlarmTheme {
@@ -214,19 +224,14 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    override fun onStart() {
-        super.onStart()
-        bindToSessionService()
-    }
-
-    override fun onStop() {
-        super.onStop()
-        unbindFromSessionService()
-    }
-
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        unbindFromSessionService()
     }
 
     private fun bindToSessionService() {
